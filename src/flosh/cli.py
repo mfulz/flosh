@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
 
+from flosh import picker as picker_mod
 from flosh.config import (
     ConfigFormat,
     RuntimeContext,
     config_get,
     edit_config,
+    get_dotted,
     init_config,
     make_runtime_context,
     render_config,
@@ -17,6 +20,7 @@ from flosh.config import (
 from flosh.config import (
     config_set as write_config_value,
 )
+from flosh.state import effective_target, recent_limit, state_path, target_root, update_target
 
 app = typer.Typer(
     name="flosh",
@@ -24,11 +28,23 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-config_app = typer.Typer(help="Inspect and manage flosh configuration files.")
-target_app = typer.Typer(help="Inspect and manage the active capture target directory.")
-take_app = typer.Typer(help="Capture screenshots and route them through save/edit flows.")
-paste_app = typer.Typer(help="Type clipboard or text into the focused application.")
-ocr_app = typer.Typer(help="Capture and OCR screen content.")
+config_app = typer.Typer(
+    help="Inspect and manage flosh configuration files.",
+    no_args_is_help=True,
+)
+target_app = typer.Typer(
+    help="Inspect and manage the active capture target directory.",
+    no_args_is_help=True,
+)
+take_app = typer.Typer(
+    help="Capture screenshots and route them through save/edit flows.",
+    no_args_is_help=True,
+)
+paste_app = typer.Typer(
+    help="Type clipboard or text into the focused application.",
+    no_args_is_help=True,
+)
+ocr_app = typer.Typer(help="Capture and OCR screen content.", no_args_is_help=True)
 
 app.add_typer(config_app, name="config")
 app.add_typer(target_app, name="target")
@@ -144,21 +160,109 @@ def config_edit(ctx: typer.Context) -> None:
 
 
 @target_app.command("show")
-def target_show() -> None:
+def target_show(
+    ctx: typer.Context,
+    short: bool = typer.Option(False, "--short", help="Print only the directory basename."),
+    json_output: bool = typer.Option(False, "--json", help="Print Waybar-compatible JSON."),
+) -> None:
     """Print the active capture target directory."""
-    typer.echo("not implemented yet")
+    resolved = resolve_config(ctx_obj(ctx))
+    target = effective_target(resolved).expanduser()
+
+    if json_output:
+        payload = {
+            "text": target.name or str(target),
+            "tooltip": str(target),
+            "class": "flosh-target",
+        }
+        typer.echo(json.dumps(payload, sort_keys=True))
+        return
+
+    typer.echo(target.name if short else target)
 
 
 @target_app.command("set")
-def target_set(path: str) -> None:
+def target_set(
+    ctx: typer.Context,
+    path: Path = typer.Argument(..., help="Target directory to store in flosh state."),
+    create: bool = typer.Option(
+        False,
+        "--create",
+        help="Create the directory if it does not exist.",
+    ),
+    print_only: bool = typer.Option(
+        False,
+        "--print-only",
+        help="Print resolved path without writing state.",
+    ),
+) -> None:
     """Set the active capture target directory."""
-    typer.echo(f"not implemented yet: {path}")
+    resolved = resolve_config(ctx_obj(ctx))
+    target = path.expanduser().resolve(strict=False)
+    if target.exists() and not target.is_dir():
+        raise typer.BadParameter(f"target exists but is not a directory: {target}")
+    if not target.exists():
+        if create:
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            raise typer.BadParameter(f"target does not exist: {target}; use --create")
+
+    if not print_only:
+        update_target(state_path(resolved), target, recent_limit=recent_limit(resolved))
+    typer.echo(target)
 
 
 @target_app.command("pick")
-def target_pick() -> None:
+def target_pick(
+    ctx: typer.Context,
+    root: Path | None = typer.Option(
+        None,
+        "--root",
+        envvar="FLOSH_TARGET_ROOT",
+        help="Root directory used as picker boundary.",
+    ),
+    start_current: bool = typer.Option(
+        False,
+        "--start-current",
+        help="Start browsing at the current target if it is below root.",
+    ),
+    create: bool = typer.Option(False, "--create", help="Allow creating directories."),
+    include_hidden: bool = typer.Option(False, "--include-hidden", help="Show hidden directories."),
+    picker: str | None = typer.Option(
+        None,
+        "--picker",
+        envvar="FLOSH_PICKER",
+        help="Picker backend: auto, fzf, wofi, rofi, stdin.",
+    ),
+    print_only: bool = typer.Option(
+        False,
+        "--print-only",
+        help="Print selection without writing state.",
+    ),
+) -> None:
     """Interactively choose the active capture target directory."""
-    typer.echo("not implemented yet")
+    resolved = resolve_config(ctx_obj(ctx))
+    selected_root = (root.expanduser() if root else target_root(resolved)).resolve(strict=False)
+    selected_picker = picker or str(get_dotted(resolved.data, "capture.picker"))
+    start = effective_target(resolved) if start_current else None
+
+    try:
+        selected = picker_mod.browse_directory(
+            selected_root,
+            start=start,
+            include_hidden=include_hidden,
+            allow_create=create,
+            picker=selected_picker,
+        )
+    except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+    if selected is None:
+        raise typer.Exit(1)
+
+    if not print_only:
+        update_target(state_path(resolved), selected, recent_limit=recent_limit(resolved))
+    typer.echo(selected)
 
 
 @take_app.callback(invoke_without_command=True)
