@@ -243,10 +243,10 @@ def target_pick(
         envvar="FLOSH_TARGET_ROOT",
         help="Optional picker boundary. Defaults to / and starts at target.root.",
     ),
-    start_current: bool = typer.Option(
-        False,
-        "--start-current",
-        help="Start browsing at the current target if it is below root.",
+    start_current: bool | None = typer.Option(
+        None,
+        "--start-current/--no-start-current",
+        help="Start browsing at current target. Defaults to target.start.",
     ),
     create: bool | None = typer.Option(
         None,
@@ -363,19 +363,34 @@ def default_pick_root_and_start(
     resolved_config: ResolvedConfig,
     *,
     explicit_root: Path | None,
-    start_current: bool,
+    start_current: bool | None,
 ) -> tuple[Path, Path | None]:
+    should_start_current = resolve_start_current(resolved_config, start_current)
     if explicit_root is not None:
         root = explicit_root.expanduser().resolve(strict=False)
-        start = effective_target(resolved_config).expanduser() if start_current else None
+        start = effective_target(resolved_config).expanduser() if should_start_current else None
         return root, start
     root = Path("/")
     start = (
         effective_target(resolved_config).expanduser()
-        if start_current
+        if should_start_current
         else target_root(resolved_config).expanduser()
     )
     return root, start
+
+
+def resolve_start_current(
+    resolved_config: ResolvedConfig,
+    start_current: bool | None,
+) -> bool:
+    if start_current is not None:
+        return start_current
+    configured = str(get_dotted(resolved_config.data, "target.start")).strip().lower()
+    if configured in {"current", "target", "state"}:
+        return True
+    if configured in {"root", "default"}:
+        return False
+    raise typer.BadParameter(f"unsupported target.start: {configured}")
 
 
 @take_app.callback(invoke_without_command=True)

@@ -69,6 +69,7 @@ ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_CAPTURE_EDITOR": ("capture.editor", str),
     "FLOSH_FILENAME_TEMPLATE": ("capture.filename_template", str),
     "FLOSH_TARGET_ROOT": ("target.root", str),
+    "FLOSH_TARGET_START": ("target.start", str),
     "FLOSH_TARGET_CREATE": ("target.create", bool),
     "FLOSH_PICKER": ("capture.picker", str),
     "FLOSH_TERMINAL": ("tools.terminal", str),

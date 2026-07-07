@@ -202,6 +202,7 @@ FLOSH_CAPTURE_DESTINATION=clipboard
 FLOSH_CAPTURE_SAVE_DIR=/tmp/screens
 FLOSH_FILENAME_TEMPLATE='%Y-%m-%d_%H-%M-%S.png'
 FLOSH_TARGET_ROOT=/home/mfulz/Work/PRIVATE
+FLOSH_TARGET_START=current
 FLOSH_TARGET_CREATE=false
 FLOSH_PICKER=fzf
 FLOSH_TERMINAL=alacritty
@@ -281,8 +282,10 @@ flosh target pick
 Current behavior:
 
 - without `--root`, picker boundary is `/`
-- start directory is `target.root` from config
-- this allows moving out to `/tmp`, `/home`, etc.
+- start directory is controlled by `target.start`
+- default `target.start = "current"` starts at the persisted target state
+- `target.start = "root"` starts at `target.root`
+- this allows moving out to `/tmp`, `/home`, etc. unless `--root` is used
 - with `--root`, picker is explicitly constrained below that root
 
 Examples:
@@ -292,6 +295,7 @@ flosh target pick --picker fzf
 flosh target pick --root ~/Work/PRIVATE --create
 flosh target pick --root ~/Work/PRIVATE --no-create
 flosh target pick --root ~/Work/PRIVATE --start-current --create --picker fzf
+flosh target pick --no-start-current --picker fzf
 ```
 
 Picker navigation model:
