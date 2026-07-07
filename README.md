@@ -186,6 +186,11 @@ command = "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} {{text}}"
 [paste.backend.xdotool-de]
 command = "setxkbmap de && {{xdotool}} type --clearmodifiers --delay {{delay_ms}} {{text}}"
 
+[paste.backend.xdotool-de-win]
+command = "setxkbmap de && {{xdotool}} type --clearmodifiers --delay {{delay_ms}} {{text}}"
+pre_command = "setxkbmap de"
+newline = "xdotool-return"
+
 [paste.backend.wtype]
 command = "printf %s {{text}} | {{wtype}} -d {{delay_ms}} -"
 
@@ -522,6 +527,7 @@ Backends are configured through `paste.backend.<name>.command` and selected with
 ```bash
 flosh paste clipboard --backend xdotool
 flosh paste clipboard --backend xdotool-de
+flosh paste clipboard --backend xdotool-de-win
 flosh paste clipboard --backend wtype
 flosh paste clipboard --backend ydotool
 ```
@@ -532,9 +538,12 @@ The subcommands map to `paste.actions.clipboard`, `paste.actions.text`, and
 Current practical default is `xdotool`, because Citrix/Wfica as XWayland was
 tested with `xdotool`, while `wtype` produced incorrect input in that target.
 For German X11 keymaps in Citrix/Wfica, use `--backend xdotool-de`; it runs
-`setxkbmap de` before typing. Clipboard paste strips trailing newlines by default
-because shell command substitution, e.g. `xdotool type "$(wl-paste)"`, does the
-same and some Citrix sessions mis-handle a final newline.
+`setxkbmap de` before typing. For Windows/Citrix multi-line input, use
+`--backend xdotool-de-win`; it sends newline characters as explicit
+`xdotool key Return` events instead of typing raw `\n`. Clipboard paste strips
+trailing newlines by default because shell command substitution, e.g.
+`xdotool type "$(wl-paste)"`, does the same and some Citrix sessions mis-handle a
+final newline.
 
 ## OCR commands
 
