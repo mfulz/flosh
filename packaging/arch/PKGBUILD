@@ -38,7 +38,7 @@ optdepends=(
   'imagemagick: OCR preprocessing support'
 )
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('060ff5e8ad97571c7b32a5040413c20f6eb20f25bcab20abc966a3a2ad70b945')
+sha256sums=('c7239b72755777c23dc388861ebc181402e667497efefdf2e3e4f2601f102557')
 
 build() {
   cd "${pkgname}-${pkgver}"
