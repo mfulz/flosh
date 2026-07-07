@@ -515,7 +515,7 @@ Current example:
   "signal": 8,
   "tooltip": true,
   "on-click": "flosh take",
-  "on-click-right": "sh -c 'flosh target pick --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
+  "on-click-right": "sh -c 'flosh target pick --start-current --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
 }
 ```
 
@@ -571,7 +571,7 @@ bindsym $mod+Shift+v exec "$HOME/.local/bin/flosh paste clipboard --backend xdot
 Pick target directory:
 
 ```sway
-bindsym $mod+Ctrl+p exec "sh -c '$HOME/.local/bin/flosh target pick --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
+bindsym $mod+Ctrl+p exec "sh -c '$HOME/.local/bin/flosh target pick --start-current --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
 ```
 
 ## Migration from shotdir

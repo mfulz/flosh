@@ -197,6 +197,18 @@ def within_root(root: Path, candidate: Path) -> bool:
         return False
 
 
+def nearest_existing_directory(path: Path, *, fallback: Path) -> Path:
+    current = normalize(path)
+    root = normalize(fallback)
+    while within_root(root, current):
+        if current.exists() and current.is_dir():
+            return current
+        if current == current.parent:
+            break
+        current = current.parent
+    return root
+
+
 def list_child_directories(base: Path, *, include_hidden: bool) -> list[Path]:
     children: list[Path] = []
     try:
@@ -254,8 +266,7 @@ def browse_directory(
     current = normalize(start) if start else root
     if not within_root(root, current):
         current = root
-    if not current.exists() or not current.is_dir():
-        current = root
+    current = nearest_existing_directory(current, fallback=root)
 
     while True:
         entries = [SELECT_HERE]
