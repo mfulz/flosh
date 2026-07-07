@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flosh"
+version = "0.1.0"
+description = "Wayland-first capture, OCR, clipboard typing, and screenshot target workflow CLI."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Matthias Fulz" }
+]
+keywords = [
+  "wayland",
+  "screenshot",
+  "clipboard",
+  "ocr",
+  "sway",
+  "grim",
+  "slurp",
+  "swappy",
+  "xdotool",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Desktop Environment",
+  "Topic :: Multimedia :: Graphics :: Capture :: Screen Capture",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "platformdirs>=4.0",
+  "tomlkit>=0.13",
+  "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.6",
+  "mypy>=1.10",
+  "pytest>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mfulz/flosh"
+Repository = "https://github.com/mfulz/flosh"
+Issues = "https://github.com/mfulz/flosh/issues"
+
+[project.scripts]
+flosh = "flosh.cli:app"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
