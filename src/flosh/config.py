@@ -27,6 +27,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "--actions-on-escape exit --early-exit save"
         ),
         "modes": {},
+        "vars": {},
         "filename_template": "%Y-%m-%d_%H-%M-%S.png",
         "save_dir": "~/Pictures/Screenshots",
         "editor": "satty",

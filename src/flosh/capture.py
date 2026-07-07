@@ -151,11 +151,26 @@ def run_capture_command(settings: CaptureCommandSettings) -> Path | None:
 
 
 def render_command_template(template: str, values: dict[str, str]) -> str:
+    return expand_template_value(template, values, stack=())
+
+
+def expand_template_value(
+    template: str,
+    values: dict[str, str],
+    *,
+    stack: tuple[str, ...],
+) -> str:
     def replace(match: re.Match[str]) -> str:
         key = match.group(1)
         if key not in values:
             raise ValueError(f"unknown capture command template variable: {key}")
-        return shlex.quote(values[key])
+        if key in stack:
+            cycle = " -> ".join((*stack, key))
+            raise ValueError(f"recursive capture command template variable: {cycle}")
+        value = values[key]
+        if TEMPLATE_PATTERN.search(value):
+            return expand_template_value(value, values, stack=(*stack, key))
+        return shlex.quote(value)
 
     return TEMPLATE_PATTERN.sub(replace, template)
 

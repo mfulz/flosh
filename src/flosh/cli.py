@@ -505,6 +505,21 @@ def capture_command_settings(
         if isinstance(tools, dict)
         else {}
     )
+    capture_vars = capture.get("vars", {})
+    profile_vars = profile.get("vars", {})
+    custom_variables = {
+        **tool_variables,
+        **(
+            {str(key): str(value) for key, value in capture_vars.items()}
+            if isinstance(capture_vars, dict)
+            else {}
+        ),
+        **(
+            {str(key): str(value) for key, value in profile_vars.items()}
+            if isinstance(profile_vars, dict)
+            else {}
+        ),
+    }
     return CaptureCommandSettings(
         target_dir=effective_target(resolved).expanduser(),
         mode=selected_mode,  # type: ignore[arg-type]
@@ -514,7 +529,7 @@ def capture_command_settings(
         profile_name=profile_name,
         command=command,
         destination=destination,
-        variables=tool_variables,
+        variables=custom_variables,
     )
 
 

@@ -144,6 +144,12 @@ picker = "auto"
 # Optional global per-mode command overrides:
 # window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 
+[capture.vars]
+# Optional reusable command fragments. Values may reference other variables.
+# grab = "{{grimshot}} save {{mode}} -"
+# edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+# satty_pipe = "{{grab}} | {{edit}}"
+
 [capture.profiles.satty]
 destination = "file"
 
@@ -402,6 +408,12 @@ command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --ac
 # Optional global command override for one flosh mode:
 # window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 
+[capture.vars]
+# Optional reusable command fragments. Values may reference other variables.
+# grab = "{{grimshot}} save {{mode}} -"
+# edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+# satty_pipe = "{{grab}} | {{edit}}"
+
 [capture.profiles.satty]
 destination = "file"
 ```
@@ -415,6 +427,22 @@ Supported template variables are shell-quoted automatically:
 - `{{filename}}` — computed output filename
 - `{{profile}}` — selected capture profile name
 - tool names from `[tools]`, e.g. `{{grimshot}}`, `{{satty}}`, `{{wl_copy}}`
+- custom fragments from `[capture.vars]` and `[capture.profiles.<profile>.vars]`
+
+Template values can be nested. Example:
+
+```toml
+[capture]
+command = "{{satty_pipe}}"
+
+[capture.vars]
+grab = "{{grimshot}} save {{mode}} -"
+edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+satty_pipe = "{{grab}} | {{edit}}"
+```
+
+Expansion has cycle detection, so recursive fragments fail fast instead of
+looping forever.
 
 Capture modes stay uniform regardless of profile:
 
