@@ -11,11 +11,16 @@ from typing import Literal
 
 CaptureMode = Literal["area", "screen", "output", "active", "window"]
 CaptureDestination = Literal["clipboard", "file"]
+CaptureEditor = Literal["satty", "swappy"]
 
-MENU_SWAPPY = "Edit/save in swappy"
+MENU_EDITOR = "Edit/save in editor"
 MENU_SAVE = "Save screenshot directly"
 MENU_SELECT_DIR = "Select/change target directory"
 MENU_CANCEL = "Cancel"
+
+
+class CaptureCancelled(RuntimeError):
+    """Raised when an interactive capture/editor flow is cancelled."""
 
 
 @dataclass(frozen=True)
@@ -25,7 +30,9 @@ class CaptureSettings:
     filename_template: str
     use_swappy: bool
     grimshot: str
+    editor: CaptureEditor
     swappy: str
+    satty: str
     wl_copy: str
     picker: str
 
@@ -59,31 +66,37 @@ def capture_screenshot_to_file(settings: CaptureSettings) -> Path:
     return output_path
 
 
-def open_swappy_editor(settings: CaptureSettings) -> Path:
+def open_editor(settings: CaptureSettings) -> Path:
     raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
     try:
         return edit_raw_capture(
             raw_path,
             target_dir=settings.target_dir,
             filename_template=settings.filename_template,
+            editor=settings.editor,
             swappy=settings.swappy,
+            satty=settings.satty,
         )
     finally:
         raw_path.unlink(missing_ok=True)
 
 
-def open_raw_in_swappy(
+def open_raw_in_editor(
     raw_path: Path,
     *,
     target_dir: Path,
     filename_template: str,
+    editor: CaptureEditor,
     swappy: str,
+    satty: str,
 ) -> Path:
     return edit_raw_capture(
         raw_path,
         target_dir=target_dir,
         filename_template=filename_template,
+        editor=editor,
         swappy=swappy,
+        satty=satty,
     )
 
 
@@ -137,13 +150,57 @@ def edit_raw_capture(
     *,
     target_dir: Path,
     filename_template: str,
+    editor: CaptureEditor,
     swappy: str,
+    satty: str,
+) -> Path:
+    if editor == "satty":
+        return edit_raw_capture_satty(
+            raw_path,
+            target_dir=target_dir,
+            filename_template=filename_template,
+            satty=satty,
+        )
+    if editor == "swappy":
+        return edit_raw_capture_swappy(raw_path, swappy=swappy)
+    raise ValueError(f"unsupported capture editor: {editor}")
+
+
+def edit_raw_capture_satty(
+    raw_path: Path,
+    *,
+    target_dir: Path,
+    filename_template: str,
+    satty: str,
 ) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     output_path = render_output_path(target_dir, filename_template)
-    run_checked([swappy, "-f", str(raw_path), "-o", str(output_path)], env=capture_env())
-    reject_empty_capture(output_path)
+    run_checked(
+        [
+            satty,
+            "--filename",
+            str(raw_path),
+            "--output-filename",
+            str(output_path),
+            "--actions-on-escape",
+            "exit",
+            "--early-exit",
+            "save",
+        ],
+        env=capture_env(),
+    )
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        output_path.unlink(missing_ok=True)
+        raise CaptureCancelled("capture cancelled")
     return output_path
+
+
+def edit_raw_capture_swappy(raw_path: Path, *, swappy: str) -> Path:
+    run_checked([swappy, "-f", str(raw_path)], env=capture_env())
+    raise RuntimeError(
+        "swappy editor cannot report the saved output path reliably; "
+        "use capture.editor=satty for flosh-managed saves"
+    )
 
 
 def capture_env() -> dict[str, str]:

@@ -22,7 +22,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "default_destination": "clipboard",
         "filename_template": "%Y-%m-%d_%H-%M-%S.png",
         "save_dir": "~/Pictures/Screenshots",
-        "editor": "swappy",
+        "editor": "satty",
         "picker": "auto",
     },
     "target": {
@@ -48,6 +48,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "grim": "grim",
         "slurp": "slurp",
         "swappy": "swappy",
+        "satty": "satty",
         "wl_copy": "wl-copy",
         "wl_paste": "wl-paste",
         "xdotool": "xdotool",

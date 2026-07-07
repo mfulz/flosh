@@ -1,7 +1,7 @@
 # flosh
 
 `flosh` is a small Wayland-first workflow CLI for screenshot target management,
-swappy-based captures, and clipboard-to-keyboard typing.
+annotated captures, OCR, and clipboard-to-keyboard typing.
 
 It is intentionally CLI-first: Sway bindings, Waybar modules, a future tray icon,
 or a future overlay should call the same commands instead of reimplementing the
@@ -17,7 +17,7 @@ Implemented and usable now:
 - profile and environment overrides
 - active screenshot target state
 - interactive target picker (`wofi`, `rofi`, `fzf`, or stdin fallback)
-- swappy screenshot flow
+- Satty screenshot annotation flow
 - direct no-swappy screenshot output to clipboard or file
 - typing clipboard/text/stdin into the focused app (`xdotool`, `wtype`, `ydotool`)
 - OCR area capture to clipboard, optionally saved as `.txt`
@@ -73,7 +73,7 @@ pip install -e '.[dev]'
 Expected system tools for the current Sway/Wayland workflow:
 
 ```bash
-sudo pacman -S --needed grim slurp swappy wl-clipboard xdotool fzf wofi
+sudo pacman -S --needed grim slurp satty wl-clipboard xdotool fzf wofi
 ```
 
 Only tools needed by the command being used are required at runtime.
@@ -135,7 +135,7 @@ default_mode = "area"
 default_destination = "clipboard"
 filename_template = "%Y-%m-%d_%H-%M-%S.png"
 save_dir = "~/Pictures/Screenshots"
-editor = "swappy"
+editor = "satty"
 picker = "auto"
 
 [target]
@@ -161,6 +161,7 @@ grimshot = "grimshot"
 grim = "grim"
 slurp = "slurp"
 swappy = "swappy"
+satty = "satty"
 wl_copy = "wl-copy"
 wl_paste = "wl-paste"
 xdotool = "xdotool"
@@ -349,7 +350,7 @@ relative/path + --create          creates below the current picker directory
 
 ## Screenshot commands
 
-### Swappy flow
+### Editor flow
 
 Default screenshot command:
 
@@ -357,19 +358,26 @@ Default screenshot command:
 flosh take
 ```
 
+Current default editor is `satty` because its save/cancel semantics are explicit:
+`--output-filename` is used for the save action, while Escape is configured to
+exit without saving.
+
 Current behavior:
 
 1. capture a raw screenshot via `grimshot`
-2. open `swappy`
-3. pass an output path with `-o` pointing at the active target directory
+2. open the configured editor (`capture.editor`, default: `satty`)
+3. pass the active target output path to Satty as its save filename
 4. keep stdout/stderr quiet by default
-5. show a desktop notification after swappy exits successfully
+5. show a desktop notification after a successful save
 
 Conceptually:
 
 ```bash
 grimshot save area /tmp/flosh-capture-XXXX.png
-swappy -f /tmp/flosh-capture-XXXX.png -o "$ACTIVE_TARGET/filename.png"
+satty --filename /tmp/flosh-capture-XXXX.png \
+  --output-filename "$ACTIVE_TARGET/filename.png" \
+  --actions-on-escape exit \
+  --early-exit save
 ```
 
 Capture modes:
@@ -382,9 +390,20 @@ flosh take --mode active
 flosh take --mode window
 ```
 
-### Direct output without swappy
+Swappy can still be selected explicitly, but it cannot reliably report the saved
+path to flosh without using `-o`, and `swappy -o` exports on exit, which breaks
+Escape-as-cancel semantics. Prefer Satty for flosh-managed saves.
 
-Use `--no-swappy` when `flosh` itself should decide the output destination.
+```bash
+flosh config set capture.editor satty
+FLOSH_CAPTURE_EDITOR=satty flosh take
+```
+
+### Direct output without editor
+
+Use `--no-swappy` when `flosh` itself should decide the output destination and no
+annotation editor should be opened. The flag keeps the old public name for now,
+but semantically means “no editor”.
 
 Default direct destination is `capture.default_destination`, currently
 `clipboard`.
@@ -422,7 +441,7 @@ flosh take menu
 Current menu entries:
 
 ```text
-Edit/save in swappy
+Edit/save in editor
 Save screenshot directly
 Select/change target directory
 Cancel
@@ -430,10 +449,10 @@ Cancel
 
 Notes:
 
-- `Edit/save in swappy` opens swappy with `-o` set to the active target path.
-- `Save screenshot directly` saves the already captured raw screenshot without swappy.
+- `Edit/save in editor` opens the configured editor against the already captured raw screenshot.
+- `Save screenshot directly` saves the already captured raw screenshot without an editor.
 - `Select/change target directory` changes target state before choosing another action.
-- OCR menu entries are planned later.
+- OCR is intentionally separate as `flosh ocr capture`.
 
 ## Paste commands
 
@@ -573,7 +592,7 @@ OCR and paste can also be represented as text+icon buttons:
 
 ## Sway integration
 
-Screenshot via swappy:
+Screenshot via configured editor:
 
 ```sway
 bindsym $mod+p exec "$HOME/.local/bin/flosh take"

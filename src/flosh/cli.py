@@ -10,9 +10,10 @@ import typer
 from flosh import picker as picker_mod
 from flosh.capture import (
     MENU_CANCEL,
+    MENU_EDITOR,
     MENU_SAVE,
     MENU_SELECT_DIR,
-    MENU_SWAPPY,
+    CaptureCancelled,
     CaptureDestination,
     CaptureMode,
     CaptureSettings,
@@ -20,8 +21,8 @@ from flosh.capture import (
     capture_screenshot_to_clipboard,
     capture_screenshot_to_file,
     notify,
-    open_raw_in_swappy,
-    open_swappy_editor,
+    open_editor,
+    open_raw_in_editor,
     save_raw_capture,
 )
 from flosh.config import (
@@ -425,6 +426,9 @@ def capture_settings(
     selected_mode = mode or str(get_dotted(resolved.data, "capture.default_mode"))
     if selected_mode not in {"area", "screen", "output", "active", "window"}:
         raise typer.BadParameter(f"unsupported capture mode: {selected_mode}")
+    selected_editor = str(get_dotted(resolved.data, "capture.editor"))
+    if selected_editor not in {"satty", "swappy"}:
+        raise typer.BadParameter(f"unsupported capture.editor: {selected_editor}")
     return CaptureSettings(
         target_dir=effective_target(resolved).expanduser(),
         mode=selected_mode,  # type: ignore[arg-type]
@@ -432,8 +436,10 @@ def capture_settings(
         if filename_template is not None
         else str(get_dotted(resolved.data, "capture.filename_template")),
         use_swappy=not no_swappy,
+        editor=selected_editor,  # type: ignore[arg-type]
         grimshot=str(get_dotted(resolved.data, "tools.grimshot")),
         swappy=str(get_dotted(resolved.data, "tools.swappy")),
+        satty=str(get_dotted(resolved.data, "tools.satty")),
         wl_copy=str(get_dotted(resolved.data, "tools.wl_copy")),
         picker=str(get_dotted(resolved.data, "capture.picker")),
     )
@@ -545,7 +551,7 @@ def take_default(
     )
     try:
         if not no_swappy:
-            output = open_swappy_editor(settings)
+            output = open_editor(settings)
             notify("Screenshot saved", output.name)
             return
 
@@ -556,6 +562,9 @@ def take_default(
             print_clipboard_result(json_output=json_output)
             return
         output = capture_screenshot_to_file(settings)
+    except CaptureCancelled:
+        notify("Screenshot cancelled")
+        raise typer.Exit(1) from None
     except (RuntimeError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from None
     notify("Screenshot saved", output.name)
@@ -630,7 +639,7 @@ def take_menu(
     target_dir = settings.target_dir
     try:
         while True:
-            entries = [MENU_SWAPPY, MENU_SAVE, MENU_SELECT_DIR, MENU_CANCEL]
+            entries = [MENU_EDITOR, MENU_SAVE, MENU_SELECT_DIR, MENU_CANCEL]
             choice = picker_mod.pick_from_menu(
                 entries,
                 prompt=f"Screenshot action [{target_dir.name or target_dir}]",
@@ -664,16 +673,21 @@ def take_menu(
                 notify("Screenshot saved", output.name)
                 print_capture_result(output, json_output=json_output)
                 return
-            if choice == MENU_SWAPPY:
-                output = open_raw_in_swappy(
+            if choice == MENU_EDITOR:
+                output = open_raw_in_editor(
                     raw_path,
                     target_dir=target_dir,
                     filename_template=settings.filename_template,
+                    editor=settings.editor,
                     swappy=settings.swappy,
+                    satty=settings.satty,
                 )
                 notify("Screenshot saved", output.name)
                 return
             raise typer.BadParameter(f"unexpected menu choice: {choice}")
+    except CaptureCancelled:
+        notify("Screenshot cancelled")
+        raise typer.Exit(1) from None
     except (RuntimeError, ValueError, FileNotFoundError, NotADirectoryError) as exc:
         raise typer.BadParameter(str(exc)) from None
     finally:
