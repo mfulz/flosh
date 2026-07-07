@@ -82,6 +82,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
                     "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} {{text}}"
                 ),
             },
+            "xdotool-de-cr": {
+                "command": (
+                    "setxkbmap de && "
+                    "printf %s {{text}} | tr '\n' '\r' | "
+                    "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} --file -"
+                ),
+            },
             "wtype": {
                 "command": "printf %s {{text}} | {{wtype}} -d {{delay_ms}} -",
             },
