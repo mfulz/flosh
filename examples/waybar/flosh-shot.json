@@ -1,7 +1,7 @@
 {
   "custom/flosh-shot": {
     "format": " Shot",
-    "tooltip": "Take screenshot\nleft: capture with configured default flow\nright: save directly",
+    "tooltip-format": "Take screenshot\nleft: capture with configured default flow\nright: save directly",
     "on-click": "flosh capture",
     "on-click-right": "flosh capture --action save"
   }

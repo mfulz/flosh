@@ -10,19 +10,19 @@
   },
   "custom/flosh-shot": {
     "format": " Shot",
-    "tooltip": "Take screenshot\nleft: capture with configured default flow\nright: save directly",
+    "tooltip-format": "Take screenshot\nleft: capture with configured default flow\nright: save directly",
     "on-click": "flosh capture",
     "on-click-right": "flosh capture --action save"
   },
   "custom/flosh-ocr": {
     "format": "󰈙 OCR",
-    "tooltip": "OCR capture\nleft: OCR area to clipboard\nright: OCR area to clipboard and save .txt",
+    "tooltip-format": "OCR capture\nleft: OCR area to clipboard\nright: OCR area to clipboard and save .txt",
     "on-click": "flosh ocr capture --mode area",
     "on-click-right": "flosh ocr capture --mode area --save"
   },
   "custom/flosh-paste": {
     "format": "󰅍 Paste",
-    "tooltip": "Type clipboard into focused window",
+    "tooltip-format": "Type clipboard into focused window",
     "on-click": "flosh paste clipboard --backend xdotool --wait-s 1 --delay-ms 80"
   }
 }

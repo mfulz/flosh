@@ -608,7 +608,7 @@ Take screenshot as a separate text+icon button if wanted:
 ```json
 "custom/flosh-shot": {
   "format": " Shot",
-  "tooltip": "Take screenshot",
+  "tooltip-format": "Take screenshot",
   "on-click": "flosh capture"
 }
 ```
@@ -618,13 +618,13 @@ OCR and paste can also be represented as text+icon buttons:
 ```json
 "custom/flosh-ocr": {
   "format": "󰈙 OCR",
-  "tooltip": "OCR capture",
+  "tooltip-format": "OCR capture",
   "on-click": "flosh ocr capture --mode area",
   "on-click-right": "flosh ocr capture --mode area --save"
 },
 "custom/flosh-paste": {
   "format": "󰅍 Paste",
-  "tooltip": "Type clipboard into focused window",
+  "tooltip-format": "Type clipboard into focused window",
   "on-click": "flosh paste clipboard --backend xdotool --wait-s 1 --delay-ms 80"
 }
 ```
