@@ -15,3 +15,6 @@ packaging/**/*.tar.gz
 packaging/**/src/
 packaging/**/pkg/
 packaging/arch-git/flosh/
+
+# Generated Arch package metadata
+packaging/**/.SRCINFO
