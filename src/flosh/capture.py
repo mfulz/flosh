@@ -59,47 +59,51 @@ def capture_screenshot_to_file(settings: CaptureSettings) -> Path:
     return output_path
 
 
-def open_swappy_editor(settings: CaptureSettings) -> None:
+def open_swappy_editor(settings: CaptureSettings) -> Path:
     raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
     try:
-        open_raw_in_swappy(raw_path, swappy=settings.swappy)
+        return edit_raw_capture(
+            raw_path,
+            target_dir=settings.target_dir,
+            filename_template=settings.filename_template,
+            swappy=settings.swappy,
+        )
     finally:
         raw_path.unlink(missing_ok=True)
 
 
-def open_raw_in_swappy(raw_path: Path, *, swappy: str) -> None:
-    run_checked([swappy, "-f", str(raw_path)], env=capture_env())
+def open_raw_in_swappy(
+    raw_path: Path,
+    *,
+    target_dir: Path,
+    filename_template: str,
+    swappy: str,
+) -> Path:
+    return edit_raw_capture(
+        raw_path,
+        target_dir=target_dir,
+        filename_template=filename_template,
+        swappy=swappy,
+    )
 
 
 def capture_screenshot_to_clipboard(settings: CaptureSettings) -> None:
     raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
     try:
-        start_wl_copy(settings.wl_copy, raw_path.read_bytes())
+        start_wl_copy(settings.wl_copy, raw_path)
     finally:
         raw_path.unlink(missing_ok=True)
 
 
-def start_wl_copy(wl_copy: str, payload: bytes) -> None:
-    proc = subprocess.Popen(
-        [wl_copy, "--type", "image/png"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    if proc.stdin is None:
-        raise RuntimeError("wl-copy stdin pipe was not created")
-    proc.stdin.write(payload)
-    proc.stdin.close()
-    try:
-        rc = proc.wait(timeout=2)
-    except subprocess.TimeoutExpired:
-        # wl-copy may remain in the foreground as the clipboard owner on some setups.
-        # That is a successful clipboard hand-off for our purposes; do not block flosh.
-        return
-    stderr = proc.stderr.read() if proc.stderr is not None else b""
-    if rc != 0:
-        details = (stderr or b"").decode(errors="replace").strip()
-        raise RuntimeError(details or f"wl-copy failed with exit code {rc}")
+def start_wl_copy(wl_copy: str, payload_path: Path) -> None:
+    with payload_path.open("rb") as payload:
+        subprocess.Popen(
+            [wl_copy, "--type", "image/png"],
+            stdin=payload,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
 
 
 def reject_empty_capture(path: Path) -> None:

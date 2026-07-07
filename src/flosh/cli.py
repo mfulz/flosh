@@ -509,7 +509,12 @@ def take_menu(
                 print_capture_result(output, json_output=json_output)
                 return
             if choice == MENU_SWAPPY:
-                open_raw_in_swappy(raw_path, swappy=settings.swappy)
+                open_raw_in_swappy(
+                    raw_path,
+                    target_dir=target_dir,
+                    filename_template=settings.filename_template,
+                    swappy=settings.swappy,
+                )
                 return
             raise typer.BadParameter(f"unexpected menu choice: {choice}")
     except (RuntimeError, ValueError, FileNotFoundError, NotADirectoryError) as exc:

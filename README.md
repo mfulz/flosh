@@ -445,9 +445,9 @@ child-directory/
 flosh take
 ```
 
-By default this captures an image and opens it in `swappy`. `flosh` does not
-force a clipboard or file decision in this path; use swappy's own save/copy
-actions.
+By default this captures an image and opens it in `swappy` with `-o` pointing at
+the active target directory. Swappy remains the interactive UI; flosh only
+provides the suggested output path.
 
 ### Capture modes
 
@@ -700,7 +700,7 @@ flosh paste clipboard --backend xdotool
 
 Implemented baseline:
 
-- `flosh take` opens swappy and lets swappy handle save/copy
+- `flosh take` opens swappy with `-o` set to the active target path
 - `flosh take --no-swappy` direct clipboard/file output
 - `flosh take --no-swappy --save`
 - `flosh take menu` with save/swappy/target-change/cancel
