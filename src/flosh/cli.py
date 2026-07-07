@@ -314,15 +314,11 @@ def capture_settings(
 def print_capture_result(path: Path, *, json_output: bool) -> None:
     if json_output:
         typer.echo(json.dumps({"path": str(path), "name": path.name}, sort_keys=True))
-    else:
-        typer.echo(path)
 
 
 def print_clipboard_result(*, json_output: bool) -> None:
     if json_output:
         typer.echo(json.dumps({"destination": "clipboard"}, sort_keys=True))
-    else:
-        typer.echo("clipboard")
 
 
 def capture_destination(

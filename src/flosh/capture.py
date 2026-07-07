@@ -153,9 +153,18 @@ def capture_env() -> dict[str, str]:
 
 
 def run_checked(cmd: list[str], *, env: dict[str, str]) -> None:
-    proc = subprocess.run(cmd, env=env, check=False)
+    proc = subprocess.run(
+        cmd,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
     if proc.returncode != 0:
-        raise RuntimeError(f"command failed with exit code {proc.returncode}: {' '.join(cmd[:3])}")
+        details = (proc.stderr or "").strip()
+        base = f"command failed with exit code {proc.returncode}: {' '.join(cmd[:3])}"
+        raise RuntimeError(f"{base}: {details}" if details else base)
 
 
 def notify(summary: str, body: str = "") -> None:
