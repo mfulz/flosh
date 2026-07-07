@@ -402,7 +402,8 @@ def take_default(
     )
     try:
         if not no_swappy:
-            open_swappy_editor(settings)
+            output = open_swappy_editor(settings)
+            notify("Screenshot saved", output.name)
             return
 
         destination = capture_destination(ctx, save=save, clipboard=clipboard)
@@ -505,12 +506,13 @@ def take_menu(
                 print_capture_result(output, json_output=json_output)
                 return
             if choice == MENU_SWAPPY:
-                open_raw_in_swappy(
+                output = open_raw_in_swappy(
                     raw_path,
                     target_dir=target_dir,
                     filename_template=settings.filename_template,
                     swappy=settings.swappy,
                 )
+                notify("Screenshot saved", output.name)
                 return
             raise typer.BadParameter(f"unexpected menu choice: {choice}")
     except (RuntimeError, ValueError, FileNotFoundError, NotADirectoryError) as exc:
