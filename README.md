@@ -170,7 +170,6 @@ recent_limit = 20
 [paste]
 default_action = "clipboard"
 default_backend = "xdotool"
-keymap = "none"
 wait_s = 2.0
 delay_ms = 80
 restore_clipboard = false
@@ -260,7 +259,6 @@ FLOSH_TERMINAL=alacritty
 FLOSH_TERMINAL_CLASS=flosh-picker
 FLOSH_PASTE_BACKEND=xdotool
 FLOSH_PASTE_ACTION=clipboard
-FLOSH_PASTE_KEYMAP=de-us
 FLOSH_PASTE_WAIT_S=2
 FLOSH_PASTE_DELAY_MS=80
 FLOSH_PASTE_STRIP_TRAILING_NEWLINE=true

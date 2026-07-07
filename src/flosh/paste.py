@@ -3,11 +3,9 @@ from __future__ import annotations
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 from flosh.capture import render_command_template
-
-Keymap = Literal["none", "de-us"]
 
 
 @dataclass(frozen=True)
@@ -15,7 +13,6 @@ class PasteSettings:
     action: str
     backend_name: str
     command: str
-    keymap: Keymap
     wait_s: float
     delay_ms: int
     wl_paste: str
@@ -66,13 +63,12 @@ def type_text(text: str, settings: PasteSettings) -> None:
     if not text:
         return
 
-    mapped_text = apply_keymap(text, settings.keymap)
     rendered = render_command_template(
         settings.command,
         {
             **settings.variables,
             "backend": settings.variables["backend"],
-            "text": mapped_text,
+            "text": text,
             "delay_ms": str(settings.delay_ms),
             "action": settings.action,
             "backend_name": settings.backend_name,
@@ -80,14 +76,6 @@ def type_text(text: str, settings: PasteSettings) -> None:
         raw_keys=settings.raw_variables,
     )
     run_checked(rendered)
-
-
-def apply_keymap(text: str, keymap: Keymap) -> str:
-    if keymap == "none":
-        return text
-    if keymap == "de-us":
-        return text.translate(str.maketrans("yzYZ", "zyZY"))
-    raise ValueError(f"unsupported paste keymap: {keymap}")
 
 
 def run_checked(command: str) -> None:

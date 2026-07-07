@@ -38,7 +38,6 @@ from flosh.config import (
 )
 from flosh.ocr import OcrSettings, capture_ocr_text, copy_text_to_clipboard, save_ocr_text
 from flosh.paste import (
-    Keymap,
     PasteSettings,
     paste_action_command,
     paste_backend_command,
@@ -259,7 +258,6 @@ def target_tooltip(resolved: ResolvedConfig, target: Path) -> str:
         "paste",
         f"  action: {get_dotted(resolved.data, 'paste.default_action')}",
         f"  backend: {get_dotted(resolved.data, 'paste.default_backend')}",
-        f"  keymap: {get_dotted(resolved.data, 'paste.keymap')}",
         f"  wait_s: {get_dotted(resolved.data, 'paste.wait_s')}",
         f"  delay_ms: {get_dotted(resolved.data, 'paste.delay_ms')}",
     ]
@@ -624,7 +622,6 @@ def paste_settings(
     *,
     action: str,
     backend: str | None,
-    keymap: Keymap | None,
     wait_s: float | None,
     delay_ms: int | None,
 ) -> PasteSettings:
@@ -633,9 +630,6 @@ def paste_settings(
     if not isinstance(paste, dict):
         raise typer.BadParameter("paste must be a table")
     selected_backend = backend or str(get_dotted(resolved.data, "paste.default_backend"))
-    selected_keymap = keymap or str(get_dotted(resolved.data, "paste.keymap"))
-    if selected_keymap not in {"none", "de-us"}:
-        raise typer.BadParameter(f"unsupported paste keymap: {selected_keymap}")
     try:
         backend_command = paste_backend_command(paste, selected_backend)
         action_command = paste_action_command(paste, action)
@@ -664,7 +658,6 @@ def paste_settings(
         action=action,
         backend_name=selected_backend,
         command=action_command,
-        keymap=selected_keymap,  # type: ignore[arg-type]
         wait_s=wait_s if wait_s is not None else float(get_dotted(resolved.data, "paste.wait_s")),
         delay_ms=delay_ms
         if delay_ms is not None
@@ -697,12 +690,6 @@ def paste_clipboard(
         envvar="FLOSH_PASTE_BACKEND",
         help="Typing backend: xdotool, wtype, ydotool.",
     ),
-    keymap: Keymap | None = typer.Option(
-        None,
-        "--keymap",
-        envvar="FLOSH_PASTE_KEYMAP",
-        help="Keyboard-layout compensation: none, de-us.",
-    ),
     wait_s: float | None = typer.Option(
         None,
         "--wait-s",
@@ -721,7 +708,6 @@ def paste_clipboard(
         ctx,
         action=action or "clipboard",
         backend=backend,
-        keymap=keymap,
         wait_s=wait_s,
         delay_ms=delay_ms,
     )
@@ -751,12 +737,6 @@ def paste_text(
         envvar="FLOSH_PASTE_BACKEND",
         help="Typing backend: xdotool, wtype, ydotool.",
     ),
-    keymap: Keymap | None = typer.Option(
-        None,
-        "--keymap",
-        envvar="FLOSH_PASTE_KEYMAP",
-        help="Keyboard-layout compensation: none, de-us.",
-    ),
     wait_s: float | None = typer.Option(
         None,
         "--wait-s",
@@ -775,7 +755,6 @@ def paste_text(
         ctx,
         action=action or "text",
         backend=backend,
-        keymap=keymap,
         wait_s=wait_s,
         delay_ms=delay_ms,
     )
@@ -797,12 +776,6 @@ def paste_stdin(
         envvar="FLOSH_PASTE_BACKEND",
         help="Typing backend: xdotool, wtype, ydotool.",
     ),
-    keymap: Keymap | None = typer.Option(
-        None,
-        "--keymap",
-        envvar="FLOSH_PASTE_KEYMAP",
-        help="Keyboard-layout compensation: none, de-us.",
-    ),
     wait_s: float | None = typer.Option(
         None,
         "--wait-s",
@@ -821,7 +794,6 @@ def paste_stdin(
         ctx,
         action=action or "stdin",
         backend=backend,
-        keymap=keymap,
         wait_s=wait_s,
         delay_ms=delay_ms,
     )
