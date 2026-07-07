@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import shlex
+import subprocess
 import sys
 from pathlib import Path
+from typing import Literal
 
 import typer
 
@@ -63,12 +66,17 @@ paste_app = typer.Typer(
     no_args_is_help=True,
 )
 ocr_app = typer.Typer(help="Capture and OCR screen content.", no_args_is_help=True)
+waybar_app = typer.Typer(
+    help="Emit Waybar JSON and helper actions for flosh modules.",
+    no_args_is_help=True,
+)
 
 app.add_typer(config_app, name="config")
 app.add_typer(target_app, name="target")
 app.add_typer(take_app, name="take")
 app.add_typer(paste_app, name="paste")
 app.add_typer(ocr_app, name="ocr")
+app.add_typer(waybar_app, name="waybar")
 
 
 def ctx_obj(ctx: typer.Context) -> RuntimeContext:
@@ -274,6 +282,32 @@ def target_pick(
 ) -> None:
     """Interactively choose the active capture target directory."""
     resolved = resolve_config(ctx_obj(ctx))
+    selected = pick_target_interactive(
+        resolved,
+        root=root,
+        start_current=start_current,
+        create=create,
+        include_hidden=include_hidden,
+        picker=picker,
+        terminal=terminal,
+        write_state=not print_only,
+    )
+    if selected is None:
+        raise typer.Exit(1)
+    typer.echo(selected)
+
+
+def pick_target_interactive(
+    resolved: ResolvedConfig,
+    *,
+    root: Path | None,
+    start_current: bool | None,
+    create: bool | None,
+    include_hidden: bool,
+    picker: str | None,
+    terminal: str | None,
+    write_state: bool,
+) -> Path | None:
     selected_root, start = default_pick_root_and_start(
         resolved,
         explicit_root=root,
@@ -297,12 +331,9 @@ def target_pick(
     except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from None
 
-    if selected is None:
-        raise typer.Exit(1)
-
-    if not print_only:
+    if selected is not None and write_state:
         update_target(state_path(resolved), selected, recent_limit=recent_limit(resolved))
-    typer.echo(selected)
+    return selected
 
 
 def capture_settings(
@@ -686,6 +717,190 @@ def paste_stdin(
     """Read stdin and type it into the focused application."""
     settings = paste_settings(ctx, backend=backend, wait_s=wait_s, delay_ms=delay_ms)
     run_paste(sys.stdin.read(), settings)
+
+
+WaybarTextMode = Literal["basename", "path", "compact"]
+
+
+def format_target_text(target: Path, *, mode: WaybarTextMode, max_length: int) -> str:
+    expanded = target.expanduser()
+    if mode == "basename":
+        text = expanded.name or str(expanded)
+    elif mode == "path":
+        text = str(expanded)
+    elif mode == "compact":
+        text = compact_path(expanded)
+    else:
+        raise ValueError(f"unsupported text mode: {mode}")
+
+    if max_length > 0 and len(text) > max_length:
+        return "…" + text[-(max_length - 1) :] if max_length > 1 else "…"
+    return text
+
+
+def compact_path(path: Path) -> str:
+    home = Path.home()
+    try:
+        return "~/" + str(path.relative_to(home))
+    except ValueError:
+        return str(path)
+
+
+def waybar_target_payload(
+    target: Path,
+    *,
+    mode: WaybarTextMode,
+    max_length: int,
+) -> dict[str, object]:
+    path = target.expanduser()
+    text = format_target_text(path, mode=mode, max_length=max_length)
+    tooltip = str(path)
+    classes = ["flosh-target"]
+    if path.exists():
+        classes.append("exists")
+    else:
+        classes.append("missing")
+    return {
+        "text": text,
+        "tooltip": tooltip,
+        "class": classes,
+        "alt": str(path),
+    }
+
+
+def refresh_waybar(*, signal_number: int, process: str) -> None:
+    if signal_number < 1 or signal_number > 31:
+        raise typer.BadParameter("Waybar RT signal must be between 1 and 31")
+    subprocess.run(
+        ["pkill", f"-RTMIN+{signal_number}", process],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+@waybar_app.command("target")
+def waybar_target(
+    ctx: typer.Context,
+    text_mode: WaybarTextMode = typer.Option(
+        "basename",
+        "--text-mode",
+        help="Module text: basename, compact, or path.",
+    ),
+    max_length: int = typer.Option(
+        40,
+        "--max-length",
+        help="Ellipsize module text from the left. Use 0 to disable.",
+    ),
+) -> None:
+    """Print active target as Waybar custom JSON."""
+    resolved = resolve_config(ctx_obj(ctx))
+    payload = waybar_target_payload(
+        effective_target(resolved),
+        mode=text_mode,
+        max_length=max_length,
+    )
+    typer.echo(json.dumps(payload, sort_keys=True))
+
+
+@waybar_app.command("pick-target")
+def waybar_pick_target(
+    ctx: typer.Context,
+    root: Path | None = typer.Option(
+        None,
+        "--root",
+        envvar="FLOSH_TARGET_ROOT",
+        help="Optional picker boundary. Defaults to / and starts at target.root.",
+    ),
+    start_current: bool | None = typer.Option(
+        None,
+        "--start-current/--no-start-current",
+        help="Start browsing at current target. Defaults to target.start.",
+    ),
+    create: bool | None = typer.Option(
+        None,
+        "--create/--no-create",
+        help="Allow creating directories. Defaults to target.create.",
+    ),
+    include_hidden: bool = typer.Option(False, "--include-hidden", help="Show hidden directories."),
+    picker: str | None = typer.Option(
+        None,
+        "--picker",
+        envvar="FLOSH_PICKER",
+        help="Picker backend: auto, fzf, wofi, rofi, stdin.",
+    ),
+    terminal: str | None = typer.Option(
+        None,
+        "--terminal",
+        envvar="FLOSH_TERMINAL",
+        help="Terminal command used when fzf needs a GUI terminal.",
+    ),
+    signal_number: int = typer.Option(
+        8,
+        "--signal",
+        help="Waybar RT signal number used by the module.",
+    ),
+    no_refresh: bool = typer.Option(False, "--no-refresh", help="Do not signal Waybar."),
+    process: str = typer.Option("waybar", "--process", help="Process name to signal."),
+) -> None:
+    """Pick a target directory and refresh the Waybar module."""
+    resolved = resolve_config(ctx_obj(ctx))
+    selected = pick_target_interactive(
+        resolved,
+        root=root,
+        start_current=start_current,
+        create=create,
+        include_hidden=include_hidden,
+        picker=picker,
+        terminal=terminal,
+        write_state=True,
+    )
+    if selected is None:
+        raise typer.Exit(1)
+    if not no_refresh:
+        refresh_waybar(signal_number=signal_number, process=process)
+
+
+@waybar_app.command("refresh")
+def waybar_refresh(
+    signal_number: int = typer.Option(
+        8,
+        "--signal",
+        help="Waybar RT signal number used by the module.",
+    ),
+    process: str = typer.Option("waybar", "--process", help="Process name to signal."),
+) -> None:
+    """Trigger a Waybar custom module refresh."""
+    refresh_waybar(signal_number=signal_number, process=process)
+
+
+@waybar_app.command("module")
+def waybar_module(
+    signal_number: int = typer.Option(
+        8,
+        "--signal",
+        help="Waybar RT signal number used by the module.",
+    ),
+    picker: str = typer.Option("fzf", "--picker", help="Picker backend for on-click."),
+    terminal: str = typer.Option("alacritty", "--terminal", help="Terminal command for fzf."),
+) -> None:
+    """Print a ready-to-copy Waybar custom module snippet."""
+    module = {
+        "custom/flosh-target": {
+            "exec": "flosh waybar target --text-mode basename",
+            "return-type": "json",
+            "interval": "once",
+            "signal": signal_number,
+            "on-click": (
+                "flosh waybar pick-target "
+                f"--picker {shlex.quote(picker)} "
+                f"--terminal {shlex.quote(terminal)} "
+                f"--signal {signal_number}"
+            ),
+            "on-click-right": "flosh take menu",
+        }
+    }
+    typer.echo(json.dumps(module, indent=2, sort_keys=True))
 
 
 @ocr_app.command("capture")

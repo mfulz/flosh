@@ -84,6 +84,7 @@ flosh config ...   inspect and manage config files
 flosh target ...   inspect and manage the active capture target directory
 flosh take ...     capture screenshots and route save/edit flows
 flosh paste ...    type clipboard or text into focused applications
+flosh waybar ...   emit Waybar JSON and helper actions
 flosh ocr ...      placeholder for future OCR flow
 ```
 
@@ -489,15 +490,54 @@ Planned behavior:
 
 ## Waybar integration
 
-Show active capture target:
+`flosh waybar` exists so Waybar can call stable module-oriented commands instead
+of reassembling shell snippets everywhere. The target module is signal-driven by
+default, so changing the target can refresh Waybar immediately without polling.
+
+Print the active capture target as Waybar custom JSON:
+
+```bash
+flosh waybar target
+flosh waybar target --text-mode basename
+flosh waybar target --text-mode compact --max-length 32
+flosh waybar target --text-mode path --max-length 0
+```
+
+Example output:
+
+```json
+{
+  "alt": "/home/mfulz/Pictures/Screenshots",
+  "class": ["flosh-target", "exists"],
+  "text": "Screenshots",
+  "tooltip": "/home/mfulz/Pictures/Screenshots"
+}
+```
+
+Print a ready-to-copy module snippet:
+
+```bash
+flosh waybar module
+flosh waybar module --signal 8 --picker fzf --terminal alacritty
+```
+
+Equivalent hand-written Waybar module:
 
 ```json
 "custom/flosh-target": {
-  "exec": "flosh target show --json",
+  "exec": "flosh waybar target --text-mode basename",
   "return-type": "json",
-  "interval": 5,
-  "on-click": "flosh target pick --start-current --create --picker fzf"
+  "interval": "once",
+  "signal": 8,
+  "on-click": "flosh waybar pick-target --picker fzf --terminal alacritty --signal 8",
+  "on-click-right": "flosh take menu"
 }
+```
+
+Refresh manually if needed:
+
+```bash
+flosh waybar refresh --signal 8
 ```
 
 Take screenshot:
@@ -543,7 +583,7 @@ bindsym $mod+Shift+v exec "$HOME/.local/bin/flosh paste clipboard --backend xdot
 Pick target directory:
 
 ```sway
-bindsym $mod+Ctrl+p exec "$HOME/.local/bin/flosh target pick --start-current --create --picker fzf --terminal alacritty"
+bindsym $mod+Ctrl+p exec "$HOME/.local/bin/flosh waybar pick-target --picker fzf --terminal alacritty --signal 8"
 ```
 
 ## Migration from shotdir
