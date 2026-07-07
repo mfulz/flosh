@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-CaptureMode = Literal["area", "screen", "output", "active", "window"]
+CaptureMode = str
 CaptureDestination = Literal["clipboard", "file"]
 CaptureEditor = Literal["satty", "swappy"]
 
@@ -71,22 +71,36 @@ def render_output_path(target_dir: Path, filename_template: str) -> Path:
 TEMPLATE_PATTERN = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
 
 
-def command_for_mode(
-    capture: dict[str, Any],
-    profile: dict[str, Any],
-    mode: CaptureMode,
-) -> str:
-    for source in (profile, capture):
-        modes = source.get("modes", {})
-        if isinstance(modes, dict):
-            mode_command = modes.get(mode)
-            if isinstance(mode_command, str) and mode_command.strip():
-                return mode_command
+def command_for_profile(capture: dict[str, Any], profile: dict[str, Any]) -> str:
     for source in (profile, capture):
         command = source.get("command")
         if isinstance(command, str) and command.strip():
             return command
     raise ValueError("capture needs a non-empty command")
+
+
+def command_for_selected_mode(
+    capture: dict[str, Any],
+    profile: dict[str, Any],
+    mode: str,
+) -> str:
+    global_modes = capture.get("modes", {})
+    if not isinstance(global_modes, dict) or mode not in global_modes:
+        raise ValueError(f"unsupported capture mode: {mode}; define capture.modes.{mode}")
+    profile_modes = profile.get("modes", {})
+    if isinstance(profile_modes, dict):
+        extra_modes = sorted(str(key) for key in profile_modes if key not in global_modes)
+        if extra_modes:
+            raise ValueError(
+                "profile mode override not declared globally: " + ", ".join(extra_modes)
+            )
+        profile_command = profile_modes.get(mode)
+        if isinstance(profile_command, str) and profile_command.strip():
+            return profile_command
+    mode_command = global_modes[mode]
+    if isinstance(mode_command, str) and mode_command.strip():
+        return mode_command
+    raise ValueError(f"capture.modes.{mode} needs a non-empty command")
 
 
 def destination_for_profile(
@@ -115,7 +129,6 @@ def run_capture_command(settings: CaptureCommandSettings) -> Path | None:
     output_path = render_output_path(settings.target_dir, settings.filename_template)
     values = {
         **settings.variables,
-        "mode": settings.mode,
         "destination": str(output_path) if settings.destination == "file" else "-",
         "output": str(output_path),
         "output_path": str(output_path),

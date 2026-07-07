@@ -21,7 +21,8 @@ from flosh.capture import (
     capture_raw_screenshot,
     capture_screenshot_to_clipboard,
     capture_screenshot_to_file,
-    command_for_mode,
+    command_for_profile,
+    command_for_selected_mode,
     destination_for_profile,
     notify,
     open_raw_in_editor,
@@ -438,7 +439,7 @@ def capture_settings(
         raise typer.BadParameter(f"unsupported capture.editor: {selected_editor}")
     return CaptureSettings(
         target_dir=effective_target(resolved).expanduser(),
-        mode=selected_mode,  # type: ignore[arg-type]
+        mode=selected_mode,
         filename_template=filename_template
         if filename_template is not None
         else str(get_dotted(resolved.data, "capture.filename_template")),
@@ -474,8 +475,6 @@ def capture_command_settings(
 ) -> CaptureCommandSettings:
     resolved = resolve_config(ctx_obj(ctx))
     selected_mode = mode or str(get_dotted(resolved.data, "capture.default_mode"))
-    if selected_mode not in {"area", "screen", "output", "active", "window"}:
-        raise typer.BadParameter(f"unsupported capture mode: {selected_mode}")
 
     capture = get_dotted(resolved.data, "capture")
     if not isinstance(capture, dict):
@@ -489,7 +488,8 @@ def capture_command_settings(
         raise typer.BadParameter(f"unknown capture profile: {profile_name}")
 
     try:
-        command = command_for_mode(capture, profile, selected_mode)  # type: ignore[arg-type]
+        command = command_for_profile(capture, profile)
+        mode_command = command_for_selected_mode(capture, profile, selected_mode)
         destination = destination_for_profile(
             profile,
             configured_default=str(get_dotted(resolved.data, "capture.default_destination")),
@@ -519,10 +519,11 @@ def capture_command_settings(
             if isinstance(profile_vars, dict)
             else {}
         ),
+        "screenshot": mode_command,
     }
     return CaptureCommandSettings(
         target_dir=effective_target(resolved).expanduser(),
-        mode=selected_mode,  # type: ignore[arg-type]
+        mode=selected_mode,
         filename_template=filename_template
         if filename_template is not None
         else str(get_dotted(resolved.data, "capture.filename_template")),
@@ -976,7 +977,7 @@ def ocr_capture(
 
     settings = OcrSettings(
         target_dir=effective_target(resolved).expanduser(),
-        mode=selected_mode,  # type: ignore[arg-type]
+        mode=selected_mode,
         filename_template=filename_template
         if filename_template is not None
         else str(get_dotted(resolved.data, "capture.filename_template")),

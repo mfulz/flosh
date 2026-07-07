@@ -22,11 +22,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "default_destination": "clipboard",
         "default_profile": "satty",
         "command": (
-            "{{grimshot}} save {{mode}} - | "
-            "{{satty}} -f - -o {{destination}} "
+            "{{screenshot}} | {{satty}} -f - -o {{destination}} "
             "--actions-on-escape exit --early-exit save"
         ),
-        "modes": {},
+        "modes": {
+            "area": "{{grimshot}} save area -",
+            "screen": "{{grimshot}} save screen -",
+            "output": "{{grimshot}} save output -",
+            "active": "{{grimshot}} save active -",
+            "window": "{{grimshot}} save window -",
+        },
         "vars": {},
         "filename_template": "%Y-%m-%d_%H-%M-%S.png",
         "save_dir": "~/Pictures/Screenshots",
@@ -38,12 +43,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
             },
             "raw-save": {
                 "destination": "file",
-                "command": "{{grimshot}} save {{mode}} {{destination}}",
+                "command": "{{screenshot}} > {{destination}}",
                 "modes": {},
             },
             "clipboard": {
                 "destination": "clipboard",
-                "command": "{{grimshot}} copy {{mode}}",
+                "command": "{{screenshot}} | {{wl_copy}} --type image/png",
                 "modes": {},
             },
         },

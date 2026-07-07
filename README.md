@@ -134,32 +134,34 @@ Example config:
 default_mode = "area"
 default_destination = "clipboard"
 default_profile = "satty"
-command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+command = "{{screenshot}} | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 filename_template = "%Y-%m-%d_%H-%M-%S.png"
 save_dir = "~/Pictures/Screenshots"
 editor = "satty"
 picker = "auto"
 
 [capture.modes]
-# Optional global per-mode command overrides:
-# window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+area = "{{grimshot}} save area -"
+screen = "{{grimshot}} save screen -"
+output = "{{grimshot}} save output -"
+active = "{{grimshot}} save active -"
+window = "{{grimshot}} save window -"
 
 [capture.vars]
 # Optional reusable command fragments. Values may reference other variables.
-# grab = "{{grimshot}} save {{mode}} -"
 # edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
-# satty_pipe = "{{grab}} | {{edit}}"
+# satty_pipe = "{{screenshot}} | {{edit}}"
 
 [capture.profiles.satty]
 destination = "file"
 
 [capture.profiles.raw-save]
 destination = "file"
-command = "{{grimshot}} save {{mode}} {{destination}}"
+command = "{{screenshot}} > {{destination}}"
 
 [capture.profiles.clipboard]
 destination = "clipboard"
-command = "{{grimshot}} copy {{mode}}"
+command = "{{screenshot}} | {{wl_copy}} --type image/png"
 
 [target]
 root = "~/Pictures"
@@ -392,9 +394,11 @@ flosh take
 
 `flosh take` is driven by global `capture.command` plus `capture.default_profile`.
 Profiles may override only the parts they need: `destination`, `command`, or
-individual `modes.<mode>` entries. This keeps flosh focused on target-state,
-filenames, notifications, JSON output, and Waybar integration, while the actual
-screenshot pipeline stays configurable.
+individual `modes.<mode>` entries. `--mode` selects a globally declared
+`capture.modes.<mode>` entry; profile mode overrides must target one of those
+global modes. This keeps flosh focused on target-state, filenames,
+notifications, JSON output, and Waybar integration, while the actual screenshot
+pipeline stays configurable.
 
 Default Satty profile:
 
@@ -402,17 +406,19 @@ Default Satty profile:
 [capture]
 default_profile = "satty"
 default_mode = "area"
-command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+command = "{{screenshot}} | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 
 [capture.modes]
-# Optional global command override for one flosh mode:
-# window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+area = "{{grimshot}} save area -"
+screen = "{{grimshot}} save screen -"
+output = "{{grimshot}} save output -"
+active = "{{grimshot}} save active -"
+window = "{{grimshot}} save window -"
 
 [capture.vars]
 # Optional reusable command fragments. Values may reference other variables.
-# grab = "{{grimshot}} save {{mode}} -"
 # edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
-# satty_pipe = "{{grab}} | {{edit}}"
+# satty_pipe = "{{screenshot}} | {{edit}}"
 
 [capture.profiles.satty]
 destination = "file"
@@ -420,7 +426,7 @@ destination = "file"
 
 Supported template variables are shell-quoted automatically:
 
-- `{{mode}}` — selected flosh capture mode
+- `{{screenshot}}` — selected `capture.modes.<mode>` command fragment
 - `{{destination}}` — output path for file profiles, `-` for clipboard profiles
 - `{{output}}` / `{{output_path}}` — computed output path
 - `{{target_dir}}` — active target directory
@@ -436,9 +442,8 @@ Template values can be nested. Example:
 command = "{{satty_pipe}}"
 
 [capture.vars]
-grab = "{{grimshot}} save {{mode}} -"
 edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
-satty_pipe = "{{grab}} | {{edit}}"
+satty_pipe = "{{screenshot}} | {{edit}}"
 ```
 
 Expansion has cycle detection, so recursive fragments fail fast instead of
@@ -464,21 +469,20 @@ FLOSH_CAPTURE_PROFILE=clipboard flosh take
 
 Resolution order for commands is:
 
-1. `capture.profiles.<profile>.modes.<mode>`
-2. `capture.modes.<mode>`
-3. `capture.profiles.<profile>.command`
-4. `capture.command`
+1. `--mode` must exist as `capture.modes.<mode>`
+2. screenshot fragment: `capture.profiles.<profile>.modes.<mode>` if present, else `capture.modes.<mode>`
+3. final command: `capture.profiles.<profile>.command` if present, else `capture.command`
 
 Built-in starter profiles:
 
 ```toml
 [capture.profiles.raw-save]
 destination = "file"
-command = "{{grimshot}} save {{mode}} {{destination}}"
+command = "{{screenshot}} > {{destination}}"
 
 [capture.profiles.clipboard]
 destination = "clipboard"
-command = "{{grimshot}} copy {{mode}}"
+command = "{{screenshot}} | {{wl_copy}} --type image/png"
 ```
 
 Machine-readable output is only printed when requested:
