@@ -174,6 +174,7 @@ keymap = "none"
 wait_s = 2.0
 delay_ms = 80
 restore_clipboard = false
+strip_trailing_newline = true
 
 [paste.actions]
 clipboard = "{{backend}}"
@@ -262,6 +263,7 @@ FLOSH_PASTE_ACTION=clipboard
 FLOSH_PASTE_KEYMAP=de-us
 FLOSH_PASTE_WAIT_S=2
 FLOSH_PASTE_DELAY_MS=80
+FLOSH_PASTE_STRIP_TRAILING_NEWLINE=true
 FLOSH_STATE_PATH=/tmp/flosh-state.toml
 ```
 
@@ -532,7 +534,9 @@ The subcommands map to `paste.actions.clipboard`, `paste.actions.text`, and
 Current practical default is `xdotool`, because Citrix/Wfica as XWayland was
 tested with `xdotool`, while `wtype` produced incorrect input in that target.
 For German X11 keymaps in Citrix/Wfica, use `--backend xdotool-de`; it runs
-`setxkbmap de` before typing.
+`setxkbmap de` before typing. Clipboard paste strips trailing newlines by default
+because shell command substitution, e.g. `xdotool type "$(wl-paste)"`, does the
+same and some Citrix sessions mis-handle a final newline.
 
 ## OCR commands
 

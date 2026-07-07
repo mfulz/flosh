@@ -729,6 +729,9 @@ def paste_clipboard(
         text = read_clipboard(wl_paste=settings.wl_paste)
     except RuntimeError as exc:
         raise typer.BadParameter(str(exc)) from None
+    resolved = resolve_config(ctx_obj(ctx))
+    if bool(get_dotted(resolved.data, "paste.strip_trailing_newline")):
+        text = text.rstrip("\n")
     run_paste(text, settings)
 
 

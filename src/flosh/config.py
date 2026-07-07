@@ -67,6 +67,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "wait_s": 2.0,
         "delay_ms": 80,
         "restore_clipboard": False,
+        "strip_trailing_newline": True,
         "actions": {
             "clipboard": "{{backend}}",
             "text": "{{backend}}",
@@ -138,6 +139,7 @@ ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_PASTE_WAIT_S": ("paste.wait_s", float),
     "FLOSH_PASTE_DELAY_MS": ("paste.delay_ms", int),
     "FLOSH_PASTE_RESTORE_CLIPBOARD": ("paste.restore_clipboard", bool),
+    "FLOSH_PASTE_STRIP_TRAILING_NEWLINE": ("paste.strip_trailing_newline", bool),
     "FLOSH_OCR_LANG": ("ocr.lang", str),
     "FLOSH_OCR_PSM": ("ocr.psm", int),
     "FLOSH_OCR_PREPROCESS": ("ocr.preprocess", bool),
