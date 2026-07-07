@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import filecmp
 import os
 import shutil
 import subprocess
@@ -75,18 +76,32 @@ def capture_screenshot_to_file(settings: CaptureSettings) -> Path:
 def capture_screenshot_to_clipboard(settings: CaptureSettings) -> None:
     raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
     try:
-        proc = subprocess.run(
-            [settings.wl_copy, "--type", "image/png"],
-            input=raw_path.read_bytes(),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
+        start_wl_copy(settings.wl_copy, raw_path.read_bytes())
     finally:
         raw_path.unlink(missing_ok=True)
-    if proc.returncode != 0:
-        details = (proc.stderr or b"").decode(errors="replace").strip()
-        raise RuntimeError(details or f"wl-copy failed with exit code {proc.returncode}")
+
+
+def start_wl_copy(wl_copy: str, payload: bytes) -> None:
+    proc = subprocess.Popen(
+        [wl_copy, "--type", "image/png"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    if proc.stdin is None:
+        raise RuntimeError("wl-copy stdin pipe was not created")
+    proc.stdin.write(payload)
+    proc.stdin.close()
+    try:
+        rc = proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        # wl-copy may remain in the foreground as the clipboard owner on some setups.
+        # That is a successful clipboard hand-off for our purposes; do not block flosh.
+        return
+    stderr = proc.stderr.read() if proc.stderr is not None else b""
+    if rc != 0:
+        details = (stderr or b"").decode(errors="replace").strip()
+        raise RuntimeError(details or f"wl-copy failed with exit code {rc}")
 
 
 def reject_empty_capture(path: Path) -> None:
@@ -124,21 +139,24 @@ def edit_raw_capture(
 ) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     output_path = render_output_path(target_dir, filename_template)
-    with tempfile.NamedTemporaryFile(
-        prefix="flosh-swappy-output-",
-        suffix=output_path.suffix or ".png",
-        delete=False,
-    ) as tmp:
-        tmp_output = Path(tmp.name)
-    tmp_output.unlink(missing_ok=True)
     try:
-        run_checked([swappy, "-f", str(raw_path), "-o", str(tmp_output)], env=capture_env())
-        reject_empty_capture(tmp_output)
-        shutil.move(str(tmp_output), output_path)
+        run_checked([swappy, "-f", str(raw_path), "-o", str(output_path)], env=capture_env())
+        reject_empty_capture(output_path)
+        reject_unchanged_swappy_output(raw_path, output_path)
     except RuntimeError:
-        tmp_output.unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
         raise
     return output_path
+
+
+def reject_unchanged_swappy_output(raw_path: Path, output_path: Path) -> None:
+    try:
+        unchanged = filecmp.cmp(raw_path, output_path, shallow=False)
+    except OSError:
+        unchanged = False
+    if unchanged:
+        output_path.unlink(missing_ok=True)
+        raise RuntimeError("swappy output is unchanged; treating it as cancelled")
 
 
 def capture_env() -> dict[str, str]:
