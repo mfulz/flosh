@@ -74,7 +74,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
         "backend": {
             "xdotool": {
-                "command": "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} -- {{text}}",
+                "command": "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} {{text}}",
+            },
+            "xdotool-de": {
+                "command": (
+                    "setxkbmap de && "
+                    "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} {{text}}"
+                ),
             },
             "wtype": {
                 "command": "printf %s {{text}} | {{wtype}} -d {{delay_ms}} -",

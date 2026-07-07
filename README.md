@@ -181,7 +181,10 @@ text = "{{backend}}"
 stdin = "{{backend}}"
 
 [paste.backend.xdotool]
-command = "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} -- {{text}}"
+command = "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} {{text}}"
+
+[paste.backend.xdotool-de]
+command = "setxkbmap de && {{xdotool}} type --clearmodifiers --delay {{delay_ms}} {{text}}"
 
 [paste.backend.wtype]
 command = "printf %s {{text}} | {{wtype}} -d {{delay_ms}} -"
@@ -518,6 +521,7 @@ Backends are configured through `paste.backend.<name>.command` and selected with
 
 ```bash
 flosh paste clipboard --backend xdotool
+flosh paste clipboard --backend xdotool-de
 flosh paste clipboard --backend wtype
 flosh paste clipboard --backend ydotool
 ```
@@ -527,6 +531,8 @@ The subcommands map to `paste.actions.clipboard`, `paste.actions.text`, and
 
 Current practical default is `xdotool`, because Citrix/Wfica as XWayland was
 tested with `xdotool`, while `wtype` produced incorrect input in that target.
+For German X11 keymaps in Citrix/Wfica, use `--backend xdotool-de`; it runs
+`setxkbmap de` before typing.
 
 ## OCR commands
 
