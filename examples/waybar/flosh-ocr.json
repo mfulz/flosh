@@ -1,0 +1,8 @@
+{
+  "custom/flosh-ocr": {
+    "format": "󰈙 OCR",
+    "tooltip": "OCR capture\nleft: OCR area to clipboard\nright: OCR area to clipboard and save .txt",
+    "on-click": "flosh ocr capture --mode area",
+    "on-click-right": "flosh ocr capture --mode area --save"
+  }
+}

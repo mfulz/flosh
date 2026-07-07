@@ -1,0 +1,8 @@
+{
+  "custom/flosh-shot": {
+    "format": " Shot",
+    "tooltip": "Take screenshot\nleft: capture with configured default flow\nright: capture action menu",
+    "on-click": "flosh take",
+    "on-click-right": "flosh take menu"
+  }
+}
