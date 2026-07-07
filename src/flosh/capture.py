@@ -71,16 +71,22 @@ def render_output_path(target_dir: Path, filename_template: str) -> Path:
 TEMPLATE_PATTERN = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
 
 
-def command_for_mode(profile: dict[str, Any], mode: CaptureMode) -> str:
-    modes = profile.get("modes", {})
-    if isinstance(modes, dict):
-        mode_command = modes.get(mode)
-        if isinstance(mode_command, str) and mode_command.strip():
-            return mode_command
-    command = profile.get("command")
-    if not isinstance(command, str) or not command.strip():
-        raise ValueError("capture profile needs a non-empty command")
-    return command
+def command_for_mode(
+    capture: dict[str, Any],
+    profile: dict[str, Any],
+    mode: CaptureMode,
+) -> str:
+    for source in (profile, capture):
+        modes = source.get("modes", {})
+        if isinstance(modes, dict):
+            mode_command = modes.get(mode)
+            if isinstance(mode_command, str) and mode_command.strip():
+                return mode_command
+    for source in (profile, capture):
+        command = source.get("command")
+        if isinstance(command, str) and command.strip():
+            return command
+    raise ValueError("capture needs a non-empty command")
 
 
 def destination_for_profile(

@@ -477,6 +477,9 @@ def capture_command_settings(
     if selected_mode not in {"area", "screen", "output", "active", "window"}:
         raise typer.BadParameter(f"unsupported capture mode: {selected_mode}")
 
+    capture = get_dotted(resolved.data, "capture")
+    if not isinstance(capture, dict):
+        raise typer.BadParameter("capture must be a table")
     profile_name = capture_profile or str(get_dotted(resolved.data, "capture.default_profile"))
     profiles = get_dotted(resolved.data, "capture.profiles")
     if not isinstance(profiles, dict):
@@ -486,7 +489,7 @@ def capture_command_settings(
         raise typer.BadParameter(f"unknown capture profile: {profile_name}")
 
     try:
-        command = command_for_mode(profile, selected_mode)  # type: ignore[arg-type]
+        command = command_for_mode(capture, profile, selected_mode)  # type: ignore[arg-type]
         destination = destination_for_profile(
             profile,
             configured_default=str(get_dotted(resolved.data, "capture.default_destination")),

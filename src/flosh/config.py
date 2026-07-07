@@ -21,6 +21,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "default_mode": "area",
         "default_destination": "clipboard",
         "default_profile": "satty",
+        "command": (
+            "{{grimshot}} save {{mode}} - | "
+            "{{satty}} -f - -o {{destination}} "
+            "--actions-on-escape exit --early-exit save"
+        ),
+        "modes": {},
         "filename_template": "%Y-%m-%d_%H-%M-%S.png",
         "save_dir": "~/Pictures/Screenshots",
         "editor": "satty",
@@ -28,12 +34,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "profiles": {
             "satty": {
                 "destination": "file",
-                "command": (
-                    "{{grimshot}} save {{mode}} - | "
-                    "{{satty}} -f - -o {{destination}} "
-                    "--actions-on-escape exit --early-exit save"
-                ),
-                "modes": {},
             },
             "raw-save": {
                 "destination": "file",

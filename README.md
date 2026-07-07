@@ -134,18 +134,18 @@ Example config:
 default_mode = "area"
 default_destination = "clipboard"
 default_profile = "satty"
+command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 filename_template = "%Y-%m-%d_%H-%M-%S.png"
 save_dir = "~/Pictures/Screenshots"
 editor = "satty"
 picker = "auto"
 
+[capture.modes]
+# Optional global per-mode command overrides:
+# window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+
 [capture.profiles.satty]
 destination = "file"
-command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
-
-[capture.profiles.satty.modes]
-# Optional per-mode command overrides:
-# window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 
 [capture.profiles.raw-save]
 destination = "file"
@@ -384,10 +384,11 @@ Default screenshot command:
 flosh take
 ```
 
-`flosh take` is driven by `capture.default_profile`. A capture profile is a shell
-command template plus optional `modes.<mode>` overrides. This keeps flosh focused
-on target-state, filenames, notifications, JSON output, and Waybar integration,
-while the actual screenshot pipeline stays configurable.
+`flosh take` is driven by global `capture.command` plus `capture.default_profile`.
+Profiles may override only the parts they need: `destination`, `command`, or
+individual `modes.<mode>` entries. This keeps flosh focused on target-state,
+filenames, notifications, JSON output, and Waybar integration, while the actual
+screenshot pipeline stays configurable.
 
 Default Satty profile:
 
@@ -395,14 +396,14 @@ Default Satty profile:
 [capture]
 default_profile = "satty"
 default_mode = "area"
+command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+
+[capture.modes]
+# Optional global command override for one flosh mode:
+# window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 
 [capture.profiles.satty]
 destination = "file"
-command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
-
-[capture.profiles.satty.modes]
-# Optional command override for one flosh mode:
-# window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 ```
 
 Supported template variables are shell-quoted automatically:
@@ -432,6 +433,13 @@ flosh take --capture-profile raw-save
 flosh take --capture-profile clipboard
 FLOSH_CAPTURE_PROFILE=clipboard flosh take
 ```
+
+Resolution order for commands is:
+
+1. `capture.profiles.<profile>.modes.<mode>`
+2. `capture.modes.<mode>`
+3. `capture.profiles.<profile>.command`
+4. `capture.command`
 
 Built-in starter profiles:
 
