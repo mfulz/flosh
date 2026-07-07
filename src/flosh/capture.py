@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 CaptureMode = Literal["area", "screen", "output", "active", "window"]
 CaptureDestination = Literal["clipboard", "file"]
@@ -21,6 +23,17 @@ MENU_CANCEL = "Cancel"
 
 class CaptureCancelled(RuntimeError):
     """Raised when an interactive capture/editor flow is cancelled."""
+
+
+@dataclass(frozen=True)
+class CaptureCommandSettings:
+    target_dir: Path
+    mode: CaptureMode
+    filename_template: str
+    profile_name: str
+    command: str
+    destination: CaptureDestination
+    variables: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -52,6 +65,93 @@ def render_output_path(target_dir: Path, filename_template: str) -> Path:
         if not deduped.exists():
             return deduped
     raise ValueError(f"could not find free output filename below: {target_dir}")
+
+
+
+TEMPLATE_PATTERN = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
+
+
+def command_for_mode(profile: dict[str, Any], mode: CaptureMode) -> str:
+    modes = profile.get("modes", {})
+    if isinstance(modes, dict):
+        mode_command = modes.get(mode)
+        if isinstance(mode_command, str) and mode_command.strip():
+            return mode_command
+    command = profile.get("command")
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError("capture profile needs a non-empty command")
+    return command
+
+
+def destination_for_profile(
+    profile: dict[str, Any],
+    *,
+    configured_default: str,
+    save: bool,
+    clipboard: bool,
+) -> CaptureDestination:
+    if save and clipboard:
+        raise ValueError("--save and --clipboard are mutually exclusive")
+    if save:
+        return "file"
+    if clipboard:
+        return "clipboard"
+    configured = str(profile.get("destination", configured_default))
+    if configured == "clipboard":
+        return "clipboard"
+    if configured == "file":
+        return "file"
+    raise ValueError(f"unsupported capture destination: {configured}")
+
+
+def run_capture_command(settings: CaptureCommandSettings) -> Path | None:
+    settings.target_dir.mkdir(parents=True, exist_ok=True)
+    output_path = render_output_path(settings.target_dir, settings.filename_template)
+    values = {
+        **settings.variables,
+        "mode": settings.mode,
+        "destination": str(output_path) if settings.destination == "file" else "-",
+        "output": str(output_path),
+        "output_path": str(output_path),
+        "target_dir": str(settings.target_dir),
+        "filename": output_path.name,
+        "profile": settings.profile_name,
+    }
+    rendered = render_command_template(settings.command, values)
+    proc = subprocess.run(
+        rendered,
+        shell=True,
+        executable="/bin/sh",
+        env=capture_env(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        output_path.unlink(missing_ok=True)
+        details = (proc.stderr or "").strip()
+        raise RuntimeError(
+            f"capture command failed with exit code {proc.returncode}: {details}"
+            if details
+            else f"capture command failed with exit code {proc.returncode}"
+        )
+    if settings.destination == "clipboard":
+        return None
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        output_path.unlink(missing_ok=True)
+        raise CaptureCancelled("capture cancelled")
+    return output_path
+
+
+def render_command_template(template: str, values: dict[str, str]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in values:
+            raise ValueError(f"unknown capture command template variable: {key}")
+        return shlex.quote(values[key])
+
+    return TEMPLATE_PATTERN.sub(replace, template)
 
 
 def capture_screenshot_to_file(settings: CaptureSettings) -> Path:

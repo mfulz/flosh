@@ -14,15 +14,18 @@ from flosh.capture import (
     MENU_SAVE,
     MENU_SELECT_DIR,
     CaptureCancelled,
+    CaptureCommandSettings,
     CaptureDestination,
     CaptureMode,
     CaptureSettings,
     capture_raw_screenshot,
     capture_screenshot_to_clipboard,
     capture_screenshot_to_file,
+    command_for_mode,
+    destination_for_profile,
     notify,
-    open_editor,
     open_raw_in_editor,
+    run_capture_command,
     save_raw_capture,
 )
 from flosh.config import (
@@ -236,6 +239,7 @@ def target_tooltip(resolved: ResolvedConfig, target: Path) -> str:
         "",
         "capture",
         f"  mode: {get_dotted(resolved.data, 'capture.default_mode')}",
+        f"  profile: {get_dotted(resolved.data, 'capture.default_profile')}",
         f"  destination: {get_dotted(resolved.data, 'capture.default_destination')}",
         f"  filename: {get_dotted(resolved.data, 'capture.filename_template')}",
         f"  picker: {get_dotted(resolved.data, 'capture.picker')}",
@@ -458,6 +462,59 @@ def print_clipboard_result(*, json_output: bool) -> None:
         typer.echo(json.dumps({"destination": "clipboard"}, sort_keys=True))
 
 
+
+def capture_command_settings(
+    ctx: typer.Context,
+    *,
+    mode: CaptureMode | None,
+    filename_template: str | None,
+    capture_profile: str | None,
+    save: bool,
+    clipboard: bool,
+) -> CaptureCommandSettings:
+    resolved = resolve_config(ctx_obj(ctx))
+    selected_mode = mode or str(get_dotted(resolved.data, "capture.default_mode"))
+    if selected_mode not in {"area", "screen", "output", "active", "window"}:
+        raise typer.BadParameter(f"unsupported capture mode: {selected_mode}")
+
+    profile_name = capture_profile or str(get_dotted(resolved.data, "capture.default_profile"))
+    profiles = get_dotted(resolved.data, "capture.profiles")
+    if not isinstance(profiles, dict):
+        raise typer.BadParameter("capture.profiles must be a table")
+    profile = profiles.get(profile_name)
+    if not isinstance(profile, dict):
+        raise typer.BadParameter(f"unknown capture profile: {profile_name}")
+
+    try:
+        command = command_for_mode(profile, selected_mode)  # type: ignore[arg-type]
+        destination = destination_for_profile(
+            profile,
+            configured_default=str(get_dotted(resolved.data, "capture.default_destination")),
+            save=save,
+            clipboard=clipboard,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+    tools = get_dotted(resolved.data, "tools")
+    tool_variables = (
+        {str(key): str(value) for key, value in tools.items() if not isinstance(value, dict)}
+        if isinstance(tools, dict)
+        else {}
+    )
+    return CaptureCommandSettings(
+        target_dir=effective_target(resolved).expanduser(),
+        mode=selected_mode,  # type: ignore[arg-type]
+        filename_template=filename_template
+        if filename_template is not None
+        else str(get_dotted(resolved.data, "capture.filename_template")),
+        profile_name=profile_name,
+        command=command,
+        destination=destination,
+        variables=tool_variables,
+    )
+
+
 def capture_destination(
     ctx: typer.Context,
     *,
@@ -526,38 +583,57 @@ def take_default(
         envvar="FLOSH_FILENAME_TEMPLATE",
         help="strftime filename template for saved screenshots.",
     ),
+    capture_profile: str | None = typer.Option(
+        None,
+        "--capture-profile",
+        envvar="FLOSH_CAPTURE_PROFILE",
+        help="Capture command profile from capture.profiles.",
+    ),
     no_swappy: bool = typer.Option(
         False,
         "--no-swappy",
-        help="Do not open swappy; use flosh direct clipboard/file output instead.",
+        help="Legacy: bypass capture profiles and use flosh direct output.",
     ),
     save: bool = typer.Option(
         False,
         "--save",
-        help="With --no-swappy, save screenshot to the active target directory.",
+        help="Force file destination semantics for the selected capture flow.",
     ),
     clipboard: bool = typer.Option(
         False,
         "--clipboard",
-        help="With --no-swappy, copy screenshot image to clipboard.",
+        help="Force clipboard destination semantics for the selected capture flow.",
     ),
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
     """Take a screenshot using configured defaults."""
     if ctx.invoked_subcommand is not None:
         return
-    settings = capture_settings(
-        ctx,
-        mode=mode,
-        filename_template=filename_template,
-        no_swappy=no_swappy,
-    )
     try:
         if not no_swappy:
-            output = open_editor(settings)
+            command_settings = capture_command_settings(
+                ctx,
+                mode=mode,
+                filename_template=filename_template,
+                capture_profile=capture_profile,
+                save=save,
+                clipboard=clipboard,
+            )
+            output = run_capture_command(command_settings)
+            if output is None:
+                notify("Screenshot copied", command_settings.profile_name)
+                print_clipboard_result(json_output=json_output)
+                return
             notify("Screenshot saved", output.name)
+            print_capture_result(output, json_output=json_output)
             return
 
+        settings = capture_settings(
+            ctx,
+            mode=mode,
+            filename_template=filename_template,
+            no_swappy=no_swappy,
+        )
         destination = capture_destination(ctx, save=save, clipboard=clipboard)
         if destination == "clipboard":
             capture_screenshot_to_clipboard(settings)

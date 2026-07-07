@@ -133,10 +133,27 @@ Example config:
 [capture]
 default_mode = "area"
 default_destination = "clipboard"
+default_profile = "satty"
 filename_template = "%Y-%m-%d_%H-%M-%S.png"
 save_dir = "~/Pictures/Screenshots"
 editor = "satty"
 picker = "auto"
+
+[capture.profiles.satty]
+destination = "file"
+command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+
+[capture.profiles.satty.modes]
+# Optional per-mode command overrides:
+# window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+
+[capture.profiles.raw-save]
+destination = "file"
+command = "{{grimshot}} save {{mode}} {{destination}}"
+
+[capture.profiles.clipboard]
+destination = "clipboard"
+command = "{{grimshot}} copy {{mode}}"
 
 [target]
 root = "~/Pictures"
@@ -203,6 +220,7 @@ FLOSH_PROFILE=work
 FLOSH_VERBOSE=1
 FLOSH_CAPTURE_MODE=area
 FLOSH_CAPTURE_DESTINATION=clipboard
+FLOSH_CAPTURE_PROFILE=satty
 FLOSH_CAPTURE_SAVE_DIR=/tmp/screens
 FLOSH_FILENAME_TEMPLATE='%Y-%m-%d_%H-%M-%S.png'
 FLOSH_TARGET_ROOT=/home/mfulz/Work/PRIVATE
@@ -358,7 +376,7 @@ relative/path + --create          creates below the current picker directory
 
 ## Screenshot commands
 
-### Editor flow
+### Command-profile flow
 
 Default screenshot command:
 
@@ -366,29 +384,38 @@ Default screenshot command:
 flosh take
 ```
 
-Current default editor is `satty` because its save/cancel semantics are explicit:
-`--output-filename` is used for the save action, while Escape is configured to
-exit without saving.
+`flosh take` is driven by `capture.default_profile`. A capture profile is a shell
+command template plus optional `modes.<mode>` overrides. This keeps flosh focused
+on target-state, filenames, notifications, JSON output, and Waybar integration,
+while the actual screenshot pipeline stays configurable.
 
-Current behavior:
+Default Satty profile:
 
-1. capture a raw screenshot via `grimshot`
-2. open the configured editor (`capture.editor`, default: `satty`)
-3. pass the active target output path to Satty as its save filename
-4. keep stdout/stderr quiet by default
-5. show a desktop notification after a successful save
+```toml
+[capture]
+default_profile = "satty"
+default_mode = "area"
 
-Conceptually:
+[capture.profiles.satty]
+destination = "file"
+command = "{{grimshot}} save {{mode}} - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 
-```bash
-grimshot save area /tmp/flosh-capture-XXXX.png
-satty --filename /tmp/flosh-capture-XXXX.png \
-  --output-filename "$ACTIVE_TARGET/filename.png" \
-  --actions-on-escape exit \
-  --early-exit save
+[capture.profiles.satty.modes]
+# Optional command override for one flosh mode:
+# window = "{{grimshot}} save window - | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 ```
 
-Capture modes:
+Supported template variables are shell-quoted automatically:
+
+- `{{mode}}` — selected flosh capture mode
+- `{{destination}}` — output path for file profiles, `-` for clipboard profiles
+- `{{output}}` / `{{output_path}}` — computed output path
+- `{{target_dir}}` — active target directory
+- `{{filename}}` — computed output filename
+- `{{profile}}` — selected capture profile name
+- tool names from `[tools]`, e.g. `{{grimshot}}`, `{{satty}}`, `{{wl_copy}}`
+
+Capture modes stay uniform regardless of profile:
 
 ```bash
 flosh take --mode area
@@ -398,46 +425,42 @@ flosh take --mode active
 flosh take --mode window
 ```
 
-Swappy can still be selected explicitly, but it cannot reliably report the saved
-path to flosh without using `-o`, and `swappy -o` exports on exit, which breaks
-Escape-as-cancel semantics. Prefer Satty for flosh-managed saves.
+Select a different capture profile:
 
 ```bash
-flosh config set capture.editor satty
-FLOSH_CAPTURE_EDITOR=satty flosh take
+flosh take --capture-profile raw-save
+flosh take --capture-profile clipboard
+FLOSH_CAPTURE_PROFILE=clipboard flosh take
 ```
 
-### Direct output without editor
+Built-in starter profiles:
 
-Use `--no-swappy` when `flosh` itself should decide the output destination and no
-annotation editor should be opened. The flag keeps the old public name for now,
-but semantically means “no editor”.
+```toml
+[capture.profiles.raw-save]
+destination = "file"
+command = "{{grimshot}} save {{mode}} {{destination}}"
 
-Default direct destination is `capture.default_destination`, currently
-`clipboard`.
-
-```bash
-flosh take --no-swappy
-flosh take --no-swappy --clipboard
-flosh take --no-swappy --save
-```
-
-Make direct file output the default for `--no-swappy`:
-
-```bash
-flosh config set capture.default_destination file
-```
-
-Or for one process:
-
-```bash
-FLOSH_CAPTURE_DESTINATION=file flosh take --no-swappy
+[capture.profiles.clipboard]
+destination = "clipboard"
+command = "{{grimshot}} copy {{mode}}"
 ```
 
 Machine-readable output is only printed when requested:
 
 ```bash
-flosh take --no-swappy --save --json
+flosh take --json
+flosh take --capture-profile raw-save --json
+```
+
+### Legacy direct output without editor
+
+`--no-swappy` keeps the old public name for now and bypasses command profiles.
+It uses flosh's internal direct output implementation.
+
+```bash
+flosh take --no-swappy
+flosh take --no-swappy --clipboard
+flosh take --no-swappy --save
 ```
 
 ### Menu flow
