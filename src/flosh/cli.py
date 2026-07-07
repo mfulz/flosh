@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import typer
@@ -20,6 +21,7 @@ from flosh.config import (
 from flosh.config import (
     config_set as write_config_value,
 )
+from flosh.paste import Backend, PasteSettings, read_clipboard, type_text
 from flosh.state import effective_target, recent_limit, state_path, target_root, update_target
 
 app = typer.Typer(
@@ -271,10 +273,121 @@ def take_default() -> None:
     typer.echo("not implemented yet")
 
 
+def paste_settings(
+    ctx: typer.Context,
+    *,
+    backend: Backend | None,
+    wait_s: float | None,
+    delay_ms: int | None,
+) -> PasteSettings:
+    resolved = resolve_config(ctx_obj(ctx))
+    selected_backend = backend or str(get_dotted(resolved.data, "paste.backend"))
+    if selected_backend not in {"xdotool", "wtype", "ydotool"}:
+        raise typer.BadParameter(f"unsupported paste backend: {selected_backend}")
+    return PasteSettings(
+        backend=selected_backend,  # type: ignore[arg-type]
+        wait_s=wait_s if wait_s is not None else float(get_dotted(resolved.data, "paste.wait_s")),
+        delay_ms=delay_ms
+        if delay_ms is not None
+        else int(get_dotted(resolved.data, "paste.delay_ms")),
+        wl_paste=str(get_dotted(resolved.data, "tools.wl_paste")),
+        xdotool=str(get_dotted(resolved.data, "tools.xdotool")),
+        wtype=str(get_dotted(resolved.data, "tools.wtype")),
+        ydotool=str(get_dotted(resolved.data, "tools.ydotool")),
+    )
+
+
+def run_paste(text: str, settings: PasteSettings) -> None:
+    try:
+        type_text(text, settings)
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+
 @paste_app.command("clipboard")
-def paste_clipboard() -> None:
+def paste_clipboard(
+    ctx: typer.Context,
+    backend: Backend | None = typer.Option(
+        None,
+        "--backend",
+        envvar="FLOSH_PASTE_BACKEND",
+        help="Typing backend: xdotool, wtype, ydotool.",
+    ),
+    wait_s: float | None = typer.Option(
+        None,
+        "--wait-s",
+        envvar="FLOSH_PASTE_WAIT_S",
+        help="Seconds to wait before typing.",
+    ),
+    delay_ms: int | None = typer.Option(
+        None,
+        "--delay-ms",
+        envvar="FLOSH_PASTE_DELAY_MS",
+        help="Delay between typed characters in milliseconds.",
+    ),
+) -> None:
     """Type the current clipboard into the focused application."""
-    typer.echo("not implemented yet")
+    settings = paste_settings(ctx, backend=backend, wait_s=wait_s, delay_ms=delay_ms)
+    try:
+        text = read_clipboard(wl_paste=settings.wl_paste)
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from None
+    run_paste(text, settings)
+
+
+@paste_app.command("text")
+def paste_text(
+    ctx: typer.Context,
+    text: str = typer.Argument(..., help="Literal text to type."),
+    backend: Backend | None = typer.Option(
+        None,
+        "--backend",
+        envvar="FLOSH_PASTE_BACKEND",
+        help="Typing backend: xdotool, wtype, ydotool.",
+    ),
+    wait_s: float | None = typer.Option(
+        None,
+        "--wait-s",
+        envvar="FLOSH_PASTE_WAIT_S",
+        help="Seconds to wait before typing.",
+    ),
+    delay_ms: int | None = typer.Option(
+        None,
+        "--delay-ms",
+        envvar="FLOSH_PASTE_DELAY_MS",
+        help="Delay between typed characters in milliseconds.",
+    ),
+) -> None:
+    """Type literal text into the focused application."""
+    settings = paste_settings(ctx, backend=backend, wait_s=wait_s, delay_ms=delay_ms)
+    run_paste(text, settings)
+
+
+@paste_app.command("stdin")
+def paste_stdin(
+    ctx: typer.Context,
+    backend: Backend | None = typer.Option(
+        None,
+        "--backend",
+        envvar="FLOSH_PASTE_BACKEND",
+        help="Typing backend: xdotool, wtype, ydotool.",
+    ),
+    wait_s: float | None = typer.Option(
+        None,
+        "--wait-s",
+        envvar="FLOSH_PASTE_WAIT_S",
+        help="Seconds to wait before typing.",
+    ),
+    delay_ms: int | None = typer.Option(
+        None,
+        "--delay-ms",
+        envvar="FLOSH_PASTE_DELAY_MS",
+        help="Delay between typed characters in milliseconds.",
+    ),
+) -> None:
+    """Read stdin and type it into the focused application."""
+    settings = paste_settings(ctx, backend=backend, wait_s=wait_s, delay_ms=delay_ms)
+    run_paste(sys.stdin.read(), settings)
 
 
 @ocr_app.command("capture")
