@@ -391,8 +391,8 @@ FLOSH_TERMINAL=alacritty FLOSH_TERMINAL_CLASS=flosh-picker flosh target pick --p
 ```
 
 For Alacritty, `tools.terminal_class` sets a stable Wayland `app_id`/X11 class
-for picker windows. This makes Sway rules predictable without affecting normal
-terminal windows.
+and window title for picker windows. This makes Sway rules predictable without
+affecting normal terminal windows.
 
 Directory creation can be controlled by CLI, config, or environment:
 
@@ -654,6 +654,11 @@ Make the fzf picker terminal float by matching its stable class/app_id:
 for_window [app_id="flosh-picker"] floating enable
 for_window [app_id="flosh-picker"] resize set 1200 800
 for_window [app_id="flosh-picker"] move position center
+
+# fallback if a compositor/terminal exposes title but not app_id as expected
+for_window [title="flosh-picker"] floating enable
+for_window [title="flosh-picker"] resize set 1200 800
+for_window [title="flosh-picker"] move position center
 ```
 
 Screenshot via configured editor:

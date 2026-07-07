@@ -153,7 +153,7 @@ def terminal_command(terminal: str | None, terminal_class: str | None) -> list[s
         return ["alacritty"]
     executable = Path(command[0]).name
     if executable == "alacritty" and terminal_class:
-        return [*command, "--class", f"{terminal_class},{terminal_class}"]
+        return [*command, "--class", terminal_class, "--title", terminal_class]
     return command
 
 
