@@ -49,39 +49,25 @@ def render_output_path(target_dir: Path, filename_template: str) -> Path:
 
 def capture_screenshot_to_file(settings: CaptureSettings) -> Path:
     settings.target_dir.mkdir(parents=True, exist_ok=True)
-    output_path = render_output_path(settings.target_dir, settings.filename_template)
-    env = capture_env()
 
-    if not settings.use_swappy:
+    if settings.use_swappy:
+        raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
         try:
-            run_checked([settings.grimshot, "save", settings.mode, str(output_path)], env=env)
-        except RuntimeError:
-            output_path.unlink(missing_ok=True)
-            raise
-        reject_empty_capture(output_path)
-        return output_path
+            return edit_raw_capture(
+                raw_path,
+                target_dir=settings.target_dir,
+                filename_template=settings.filename_template,
+                swappy=settings.swappy,
+            )
+        finally:
+            raw_path.unlink(missing_ok=True)
 
-    grim = subprocess.Popen(
-        [settings.grimshot, "save", settings.mode, "-"],
-        stdout=subprocess.PIPE,
-        env=env,
-    )
-    if grim.stdout is None:
-        raise RuntimeError("grimshot stdout pipe was not created")
-    swp = subprocess.Popen(
-        [settings.swappy, "-f", "-", "-o", str(output_path)],
-        stdin=grim.stdout,
-        env=env,
-    )
-    grim.stdout.close()
-    swappy_rc = swp.wait()
-    grim_rc = grim.wait()
-    if grim_rc != 0:
+    output_path = render_output_path(settings.target_dir, settings.filename_template)
+    try:
+        run_checked([settings.grimshot, "save", settings.mode, str(output_path)], env=capture_env())
+    except RuntimeError:
         output_path.unlink(missing_ok=True)
-        raise RuntimeError(f"grimshot failed with exit code {grim_rc}")
-    if swappy_rc != 0:
-        output_path.unlink(missing_ok=True)
-        raise RuntimeError(f"swappy failed with exit code {swappy_rc}")
+        raise
     reject_empty_capture(output_path)
     return output_path
 
@@ -138,7 +124,20 @@ def edit_raw_capture(
 ) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     output_path = render_output_path(target_dir, filename_template)
-    run_checked([swappy, "-f", str(raw_path), "-o", str(output_path)], env=capture_env())
+    with tempfile.NamedTemporaryFile(
+        prefix="flosh-swappy-output-",
+        suffix=output_path.suffix or ".png",
+        delete=False,
+    ) as tmp:
+        tmp_output = Path(tmp.name)
+    tmp_output.unlink(missing_ok=True)
+    try:
+        run_checked([swappy, "-f", str(raw_path), "-o", str(tmp_output)], env=capture_env())
+        reject_empty_capture(tmp_output)
+        shutil.move(str(tmp_output), output_path)
+    except RuntimeError:
+        tmp_output.unlink(missing_ok=True)
+        raise
     return output_path
 
 
