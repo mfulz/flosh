@@ -140,6 +140,7 @@ picker = "auto"
 [target]
 root = "~/Pictures"
 start = "current"
+create = false
 recent_limit = 20
 
 [paste]
@@ -201,6 +202,7 @@ FLOSH_CAPTURE_DESTINATION=clipboard
 FLOSH_CAPTURE_SAVE_DIR=/tmp/screens
 FLOSH_FILENAME_TEMPLATE='%Y-%m-%d_%H-%M-%S.png'
 FLOSH_TARGET_ROOT=/home/mfulz/Work/PRIVATE
+FLOSH_TARGET_CREATE=false
 FLOSH_PICKER=fzf
 FLOSH_TERMINAL=alacritty
 FLOSH_PASTE_BACKEND=xdotool
@@ -288,6 +290,7 @@ Examples:
 ```bash
 flosh target pick --picker fzf
 flosh target pick --root ~/Work/PRIVATE --create
+flosh target pick --root ~/Work/PRIVATE --no-create
 flosh target pick --root ~/Work/PRIVATE --start-current --create --picker fzf
 ```
 
@@ -316,6 +319,13 @@ When `--picker fzf` is used without an attached TTY, `flosh` opens a terminal
 ```bash
 flosh target pick --picker fzf --terminal alacritty
 FLOSH_TERMINAL=alacritty flosh target pick --picker fzf
+```
+
+Directory creation can be controlled by CLI, config, or environment:
+
+```bash
+flosh config set target.create true
+FLOSH_TARGET_CREATE=true flosh target pick --picker fzf
 ```
 
 Typed paths are supported:

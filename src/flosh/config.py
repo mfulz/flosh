@@ -28,6 +28,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "target": {
         "root": "~/Pictures",
         "start": "current",
+        "create": False,
         "recent_limit": 20,
     },
     "paste": {
@@ -68,6 +69,7 @@ ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_CAPTURE_EDITOR": ("capture.editor", str),
     "FLOSH_FILENAME_TEMPLATE": ("capture.filename_template", str),
     "FLOSH_TARGET_ROOT": ("target.root", str),
+    "FLOSH_TARGET_CREATE": ("target.create", bool),
     "FLOSH_PICKER": ("capture.picker", str),
     "FLOSH_TERMINAL": ("tools.terminal", str),
     "FLOSH_PASTE_BACKEND": ("paste.backend", str),

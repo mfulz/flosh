@@ -203,10 +203,10 @@ def target_show(
 def target_set(
     ctx: typer.Context,
     path: Path = typer.Argument(..., help="Target directory to store in flosh state."),
-    create: bool = typer.Option(
-        False,
-        "--create",
-        help="Create the directory if it does not exist.",
+    create: bool | None = typer.Option(
+        None,
+        "--create/--no-create",
+        help="Create the directory if missing. Defaults to target.create.",
     ),
     print_only: bool = typer.Option(
         False,
@@ -216,11 +216,15 @@ def target_set(
 ) -> None:
     """Set the active capture target directory."""
     resolved = resolve_config(ctx_obj(ctx))
+    create_missing = create
+    if create_missing is None:
+        create_missing = bool(get_dotted(resolved.data, "target.create"))
+
     target = path.expanduser().resolve(strict=False)
     if target.exists() and not target.is_dir():
         raise typer.BadParameter(f"target exists but is not a directory: {target}")
     if not target.exists():
-        if create:
+        if create_missing:
             target.mkdir(parents=True, exist_ok=True)
         else:
             raise typer.BadParameter(f"target does not exist: {target}; use --create")
@@ -244,7 +248,11 @@ def target_pick(
         "--start-current",
         help="Start browsing at the current target if it is below root.",
     ),
-    create: bool = typer.Option(False, "--create", help="Allow creating directories."),
+    create: bool | None = typer.Option(
+        None,
+        "--create/--no-create",
+        help="Allow creating directories. Defaults to target.create.",
+    ),
     include_hidden: bool = typer.Option(False, "--include-hidden", help="Show hidden directories."),
     picker: str | None = typer.Option(
         None,
@@ -273,13 +281,16 @@ def target_pick(
     )
     selected_picker = picker or str(get_dotted(resolved.data, "capture.picker"))
     selected_terminal = terminal or str(get_dotted(resolved.data, "tools.terminal"))
+    create_missing = create
+    if create_missing is None:
+        create_missing = bool(get_dotted(resolved.data, "target.create"))
 
     try:
         selected = picker_mod.browse_directory(
             selected_root,
             start=start,
             include_hidden=include_hidden,
-            allow_create=create,
+            allow_create=create_missing,
             picker=selected_picker,
             terminal=selected_terminal,
         )
@@ -448,13 +459,23 @@ def take_menu(
         envvar="FLOSH_TARGET_ROOT",
         help="Optional picker boundary when changing target from the menu.",
     ),
-    create: bool = typer.Option(False, "--create", help="Allow creating target directories."),
+    create: bool | None = typer.Option(
+        None,
+        "--create/--no-create",
+        help="Allow creating target directories. Defaults to target.create.",
+    ),
     include_hidden: bool = typer.Option(False, "--include-hidden", help="Show hidden directories."),
     picker: str | None = typer.Option(
         None,
         "--picker",
         envvar="FLOSH_PICKER",
         help="Picker backend: auto, fzf, wofi, rofi, stdin.",
+    ),
+    terminal: str | None = typer.Option(
+        None,
+        "--terminal",
+        envvar="FLOSH_TERMINAL",
+        help="Terminal command used when fzf needs a GUI terminal.",
     ),
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
@@ -467,6 +488,10 @@ def take_menu(
     )
     resolved = resolve_config(ctx_obj(ctx))
     selected_picker = picker or settings.picker
+    selected_terminal = terminal or str(get_dotted(resolved.data, "tools.terminal"))
+    create_missing = create
+    if create_missing is None:
+        create_missing = bool(get_dotted(resolved.data, "target.create"))
     selected_root, _ = default_pick_root_and_start(
         resolved,
         explicit_root=root,
@@ -486,6 +511,7 @@ def take_menu(
                 entries,
                 prompt=f"Screenshot action [{target_dir.name or target_dir}]",
                 picker=selected_picker,
+                terminal=selected_terminal,
             )
             if not choice or choice == MENU_CANCEL:
                 notify("Screenshot cancelled")
@@ -495,8 +521,9 @@ def take_menu(
                     selected_root,
                     start=target_dir,
                     include_hidden=include_hidden,
-                    allow_create=create,
+                    allow_create=create_missing,
                     picker=selected_picker,
+                    terminal=selected_terminal,
                 )
                 if selected is None:
                     continue
