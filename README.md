@@ -146,6 +146,7 @@ recent_limit = 20
 
 [paste]
 backend = "xdotool"
+keymap = "none"
 wait_s = 2.0
 delay_ms = 80
 restore_clipboard = false
@@ -209,6 +210,7 @@ FLOSH_TARGET_CREATE=false
 FLOSH_PICKER=fzf
 FLOSH_TERMINAL=alacritty
 FLOSH_PASTE_BACKEND=xdotool
+FLOSH_PASTE_KEYMAP=de-us
 FLOSH_PASTE_WAIT_S=2
 FLOSH_PASTE_DELAY_MS=80
 FLOSH_STATE_PATH=/tmp/flosh-state.toml

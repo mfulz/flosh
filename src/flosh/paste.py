@@ -6,11 +6,13 @@ from dataclasses import dataclass
 from typing import Literal
 
 Backend = Literal["xdotool", "wtype", "ydotool"]
+Keymap = Literal["none", "de-us"]
 
 
 @dataclass(frozen=True)
 class PasteSettings:
     backend: Backend
+    keymap: Keymap
     wait_s: float
     delay_ms: int
     wl_paste: str
@@ -40,7 +42,7 @@ def type_text(text: str, settings: PasteSettings) -> None:
         return
 
     if settings.backend == "xdotool":
-        run_xdotool_type(text, settings)
+        run_xdotool_type(apply_keymap(text, settings.keymap), settings)
         return
     if settings.backend == "wtype":
         run_wtype(text, settings)
@@ -49,6 +51,14 @@ def type_text(text: str, settings: PasteSettings) -> None:
         run_ydotool_type(text, settings)
         return
     raise ValueError(f"unsupported paste backend: {settings.backend}")
+
+
+def apply_keymap(text: str, keymap: Keymap) -> str:
+    if keymap == "none":
+        return text
+    if keymap == "de-us":
+        return text.translate(str.maketrans("yzYZ", "zyZY"))
+    raise ValueError(f"unsupported paste keymap: {keymap}")
 
 
 def run_xdotool_type(text: str, settings: PasteSettings) -> None:

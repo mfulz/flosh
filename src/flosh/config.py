@@ -33,6 +33,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "paste": {
         "backend": "xdotool",
+        "keymap": "none",
         "wait_s": 2.0,
         "delay_ms": 80,
         "restore_clipboard": False,
@@ -75,6 +76,7 @@ ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_PICKER": ("capture.picker", str),
     "FLOSH_TERMINAL": ("tools.terminal", str),
     "FLOSH_PASTE_BACKEND": ("paste.backend", str),
+    "FLOSH_PASTE_KEYMAP": ("paste.keymap", str),
     "FLOSH_PASTE_WAIT_S": ("paste.wait_s", float),
     "FLOSH_PASTE_DELAY_MS": ("paste.delay_ms", int),
     "FLOSH_PASTE_RESTORE_CLIPBOARD": ("paste.restore_clipboard", bool),
