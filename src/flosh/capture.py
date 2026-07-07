@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import filecmp
 import os
 import shutil
 import subprocess
@@ -50,19 +49,6 @@ def render_output_path(target_dir: Path, filename_template: str) -> Path:
 
 def capture_screenshot_to_file(settings: CaptureSettings) -> Path:
     settings.target_dir.mkdir(parents=True, exist_ok=True)
-
-    if settings.use_swappy:
-        raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
-        try:
-            return edit_raw_capture(
-                raw_path,
-                target_dir=settings.target_dir,
-                filename_template=settings.filename_template,
-                swappy=settings.swappy,
-            )
-        finally:
-            raw_path.unlink(missing_ok=True)
-
     output_path = render_output_path(settings.target_dir, settings.filename_template)
     try:
         run_checked([settings.grimshot, "save", settings.mode, str(output_path)], env=capture_env())
@@ -71,6 +57,18 @@ def capture_screenshot_to_file(settings: CaptureSettings) -> Path:
         raise
     reject_empty_capture(output_path)
     return output_path
+
+
+def open_swappy_editor(settings: CaptureSettings) -> None:
+    raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
+    try:
+        open_raw_in_swappy(raw_path, swappy=settings.swappy)
+    finally:
+        raw_path.unlink(missing_ok=True)
+
+
+def open_raw_in_swappy(raw_path: Path, *, swappy: str) -> None:
+    run_checked([swappy, "-f", str(raw_path)], env=capture_env())
 
 
 def capture_screenshot_to_clipboard(settings: CaptureSettings) -> None:
@@ -139,24 +137,9 @@ def edit_raw_capture(
 ) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     output_path = render_output_path(target_dir, filename_template)
-    try:
-        run_checked([swappy, "-f", str(raw_path), "-o", str(output_path)], env=capture_env())
-        reject_empty_capture(output_path)
-        reject_unchanged_swappy_output(raw_path, output_path)
-    except RuntimeError:
-        output_path.unlink(missing_ok=True)
-        raise
+    run_checked([swappy, "-f", str(raw_path), "-o", str(output_path)], env=capture_env())
+    reject_empty_capture(output_path)
     return output_path
-
-
-def reject_unchanged_swappy_output(raw_path: Path, output_path: Path) -> None:
-    try:
-        unchanged = filecmp.cmp(raw_path, output_path, shallow=False)
-    except OSError:
-        unchanged = False
-    if unchanged:
-        output_path.unlink(missing_ok=True)
-        raise RuntimeError("swappy output is unchanged; treating it as cancelled")
 
 
 def capture_env() -> dict[str, str]:

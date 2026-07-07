@@ -445,9 +445,9 @@ child-directory/
 flosh take
 ```
 
-By default this captures an image and copies it to the Wayland clipboard as
-`image/png`. It does not write a permanent screenshot file unless configured or
-asked explicitly.
+By default this captures an image and opens it in `swappy`. `flosh` does not
+force a clipboard or file decision in this path; use swappy's own save/copy
+actions.
 
 ### Capture modes
 
@@ -459,20 +459,18 @@ flosh take --mode active
 flosh take --mode window
 ```
 
-### Save to the active target directory
+### Direct output without swappy
+
+Use `--no-swappy` when flosh itself should decide where the image goes. The
+default direct destination is configurable and currently defaults to clipboard.
 
 ```bash
-flosh take --save
+flosh take --no-swappy
+flosh take --no-swappy --clipboard
+flosh take --no-swappy --save
 ```
 
-By default `--save` opens the capture in `swappy` and writes the result to the
-active target directory. To save directly with `grimshot` instead:
-
-```bash
-flosh take --save --no-swappy
-```
-
-To make file output the default in a config/profile:
+To make direct file output the default for `--no-swappy` in a config/profile:
 
 ```bash
 flosh config set capture.default_destination file
@@ -481,7 +479,7 @@ flosh config set capture.default_destination file
 Or for one process environment:
 
 ```bash
-FLOSH_CAPTURE_DESTINATION=file flosh take
+FLOSH_CAPTURE_DESTINATION=file flosh take --no-swappy
 ```
 
 ### Menu flow
@@ -656,8 +654,8 @@ Existing `shotdir` features to migrate first:
 | `shotdir --show` | `flosh target show` |
 | `shotdir --set PATH` | `flosh target set PATH` |
 | `shotdir --pick-under ROOT --create` | `flosh target pick --root ROOT --create` |
-| `shotdir --take` | `flosh take --save` |
-| `shotdir --take --no-swappy` | `flosh take --save --no-swappy` |
+| `shotdir --take` | `flosh take` |
+| `shotdir --take --no-swappy` | `flosh take --no-swappy --save` |
 | `shotdir --ocr` | `flosh ocr capture --copy` |
 | `shotdir --menu` | `flosh take menu` |
 
@@ -702,9 +700,9 @@ flosh paste clipboard --backend xdotool
 
 Implemented baseline:
 
-- `flosh take` clipboard-first default
-- `flosh take --save`
-- `flosh take --save --no-swappy`
+- `flosh take` opens swappy and lets swappy handle save/copy
+- `flosh take --no-swappy` direct clipboard/file output
+- `flosh take --no-swappy --save`
 - `flosh take menu` with save/swappy/target-change/cancel
 
 ### Phase 5: OCR

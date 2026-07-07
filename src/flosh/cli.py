@@ -18,8 +18,9 @@ from flosh.capture import (
     capture_raw_screenshot,
     capture_screenshot_to_clipboard,
     capture_screenshot_to_file,
-    edit_raw_capture,
     notify,
+    open_raw_in_swappy,
+    open_swappy_editor,
     save_raw_capture,
 )
 from flosh.config import (
@@ -380,17 +381,17 @@ def take_default(
     no_swappy: bool = typer.Option(
         False,
         "--no-swappy",
-        help="When saving to file, save directly with grimshot instead of editing in swappy.",
+        help="Do not open swappy; use flosh direct clipboard/file output instead.",
     ),
     save: bool = typer.Option(
         False,
         "--save",
-        help="Save screenshot to the active target directory instead of clipboard.",
+        help="With --no-swappy, save screenshot to the active target directory.",
     ),
     clipboard: bool = typer.Option(
         False,
         "--clipboard",
-        help="Copy screenshot image to clipboard instead of saving a file.",
+        help="With --no-swappy, copy screenshot image to clipboard.",
     ),
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
@@ -403,8 +404,12 @@ def take_default(
         filename_template=filename_template,
         no_swappy=no_swappy,
     )
-    destination = capture_destination(ctx, save=save, clipboard=clipboard)
     try:
+        if not no_swappy:
+            open_swappy_editor(settings)
+            return
+
+        destination = capture_destination(ctx, save=save, clipboard=clipboard)
         if destination == "clipboard":
             capture_screenshot_to_clipboard(settings)
             notify("Screenshot copied", "image/png")
@@ -504,14 +509,7 @@ def take_menu(
                 print_capture_result(output, json_output=json_output)
                 return
             if choice == MENU_SWAPPY:
-                output = edit_raw_capture(
-                    raw_path,
-                    target_dir=target_dir,
-                    filename_template=settings.filename_template,
-                    swappy=settings.swappy,
-                )
-                notify("Screenshot saved", output.name)
-                print_capture_result(output, json_output=json_output)
+                open_raw_in_swappy(raw_path, swappy=settings.swappy)
                 return
             raise typer.BadParameter(f"unexpected menu choice: {choice}")
     except (RuntimeError, ValueError, FileNotFoundError, NotADirectoryError) as exc:
