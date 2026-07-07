@@ -2,6 +2,6 @@
   "custom/flosh-paste": {
     "format": "󰅍 Paste",
     "tooltip-format": "Type clipboard into focused window",
-    "on-click": "flosh paste clipboard --backend xdotool --wait-s 1 --delay-ms 80"
+    "on-click": "flosh paste clipboard --backend xdotool-de-cr --wait-s 1 --delay-ms 10"
   }
 }

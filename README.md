@@ -24,9 +24,8 @@ Implemented and usable now:
 
 Planned, not implemented yet:
 
-- OCR capture flow
 - GUI/tray/layer-shell overlay
-- native screenshot backend abstraction beyond the current grimshot-based path
+- native screenshot backends beyond command-template wrappers
 
 ## Runtime model
 
@@ -73,10 +72,12 @@ pip install -e '.[dev]'
 Expected system tools for the current Sway/Wayland workflow:
 
 ```bash
-sudo pacman -S --needed grim slurp satty wl-clipboard xdotool fzf wofi
+sudo pacman -S --needed grim slurp satty wl-clipboard xdotool fzf wofi tesseract imagemagick
 ```
 
-Only tools needed by the command being used are required at runtime.
+Only tools needed by the command being used are required at runtime. For example,
+OCR needs `tesseract` and optionally `magick`; the fzf target picker needs `fzf`
+and a terminal; paste backends only need their selected typing tool.
 
 ## Command overview
 
@@ -265,6 +266,8 @@ FLOSH_PASTE_ACTION=clipboard
 FLOSH_PASTE_WAIT_S=2
 FLOSH_PASTE_DELAY_MS=80
 FLOSH_PASTE_STRIP_TRAILING_NEWLINE=true
+FLOSH_OCR_LANG=deu+eng
+FLOSH_OCR_PSM=6
 FLOSH_STATE_PATH=/tmp/flosh-state.toml
 ```
 
@@ -323,7 +326,7 @@ config/profile/state and defaults are active:
   "alt": "/home/mfulz/Pictures/Screenshots",
   "class": ["flosh-target", "exists"],
   "text": "~/Pictures/Screenshots",
-  "tooltip": "flosh\ntarget: /home/mfulz/Pictures/Screenshots\nconfig: /home/mfulz/.config/flosh/config.toml\nprofile: default\nstate: /home/mfulz/.local/state/flosh/state.toml\n\ncapture\n  mode: area\n  destination: clipboard\n  filename: %Y-%m-%d_%H-%M-%S.png\n  picker: auto\n\ntarget picker\n  root: /home/mfulz/Pictures\n  start: current\n  create: False\n\npaste\n  backend: xdotool\n  wait_s: 2.0\n  delay_ms: 80"
+  "tooltip": "flosh\ntarget: /home/mfulz/Pictures/Screenshots\nconfig: /home/mfulz/.config/flosh/config.toml\nprofile: default\nstate: /home/mfulz/.local/state/flosh/state.toml\n\ncapture\n  action: take\n  mode: area\n  backend: grimshot\n  frontend: satty\n  destination: file\n  filename: %Y-%m-%d_%H-%M-%S.png\n  picker: auto\n\ntarget picker\n  root: /home/mfulz/Pictures\n  start: current\n  create: False\n\npaste\n  action: clipboard\n  backend: xdotool\n  wait_s: 2.0\n  delay_ms: 80"
 }
 ```
 
@@ -501,10 +504,17 @@ Type current Wayland clipboard into the focused app:
 flosh paste clipboard
 ```
 
-Recommended for Citrix/Wfica running as XWayland:
+Recommended baseline for Citrix/Wfica running as XWayland:
 
 ```bash
 flosh paste clipboard --backend xdotool --wait-s 2 --delay-ms 80
+```
+
+Recommended variant for German keyboard layout plus Windows/Citrix newline
+handling:
+
+```bash
+flosh paste clipboard --backend xdotool-de-cr --wait-s 1 --delay-ms 10
 ```
 
 Type literal text:
@@ -536,12 +546,12 @@ The subcommands map to `paste.actions.clipboard`, `paste.actions.text`, and
 Current practical default is `xdotool`, because Citrix/Wfica as XWayland was
 tested with `xdotool`, while `wtype` produced incorrect input in that target.
 For German X11 keymaps in Citrix/Wfica, use `--backend xdotool-de`; it runs
-`setxkbmap de` before typing. If the remote target mishandles Unix newlines,
-try `--backend xdotool-de-cr`; it keeps the behavior in configuration only,
-streams text through `xdotool type --file -`, and maps LF to CR before typing.
-Clipboard paste strips trailing newlines by default because shell command
-substitution, e.g. `xdotool type "$(wl-paste)"`, does the same and some Citrix
-sessions mis-handle a final newline.
+`setxkbmap de` before typing. If a Windows/Citrix target turns Unix newlines
+into wrong characters, use `--backend xdotool-de-cr`; it keeps the behavior in
+configuration only, streams text through `xdotool type --file -`, and maps LF to
+CR before typing. Clipboard paste strips trailing newlines by default because
+shell command substitution, e.g. `xdotool type "$(wl-paste)"`, does the same and
+some Citrix sessions mis-handle a final newline.
 
 ## OCR commands
 
@@ -632,7 +642,7 @@ OCR and paste can also be represented as text+icon buttons:
 "custom/flosh-paste": {
   "format": "󰅍 Paste",
   "tooltip-format": "Type clipboard into focused window",
-  "on-click": "flosh paste clipboard --backend xdotool --wait-s 1 --delay-ms 80"
+  "on-click": "flosh paste clipboard --backend xdotool-de-cr --wait-s 1 --delay-ms 10"
 }
 ```
 
@@ -661,7 +671,7 @@ bindsym $mod+Shift+p exec "$HOME/.local/bin/flosh capture --action save"
 Type clipboard into focused app:
 
 ```sway
-bindsym $mod+Shift+v exec "$HOME/.local/bin/flosh paste clipboard --backend xdotool --wait-s 2 --delay-ms 80"
+bindsym $mod+Shift+v exec "$HOME/.local/bin/flosh paste clipboard --backend xdotool-de-cr --wait-s 1 --delay-ms 10"
 ```
 
 Pick target directory:
