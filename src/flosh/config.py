@@ -54,6 +54,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "ydotool": "ydotool",
         "tesseract": "tesseract",
         "magick": "magick",
+        "terminal": "alacritty",
     },
     "state": {
         "path": str(default_state_path()),
@@ -68,6 +69,7 @@ ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_FILENAME_TEMPLATE": ("capture.filename_template", str),
     "FLOSH_TARGET_ROOT": ("target.root", str),
     "FLOSH_PICKER": ("capture.picker", str),
+    "FLOSH_TERMINAL": ("tools.terminal", str),
     "FLOSH_PASTE_BACKEND": ("paste.backend", str),
     "FLOSH_PASTE_WAIT_S": ("paste.wait_s", float),
     "FLOSH_PASTE_DELAY_MS": ("paste.delay_ms", int),

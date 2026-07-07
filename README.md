@@ -166,6 +166,7 @@ wtype = "wtype"
 ydotool = "ydotool"
 tesseract = "tesseract"
 magick = "magick"
+terminal = "alacritty"
 ```
 
 Profiles are nested below `[profiles.<name>]`:
@@ -201,6 +202,7 @@ FLOSH_CAPTURE_SAVE_DIR=/tmp/screens
 FLOSH_FILENAME_TEMPLATE='%Y-%m-%d_%H-%M-%S.png'
 FLOSH_TARGET_ROOT=/home/mfulz/Work/PRIVATE
 FLOSH_PICKER=fzf
+FLOSH_TERMINAL=alacritty
 FLOSH_PASTE_BACKEND=xdotool
 FLOSH_PASTE_WAIT_S=2
 FLOSH_PASTE_DELAY_MS=80
@@ -306,6 +308,22 @@ flosh target pick --picker fzf
 flosh target pick --picker wofi
 flosh target pick --picker rofi
 flosh target pick --picker stdin
+```
+
+When `--picker fzf` is used without an attached TTY, `flosh` opens a terminal
+(default: `alacritty`) and runs `fzf` there. Override it with:
+
+```bash
+flosh target pick --picker fzf --terminal alacritty
+FLOSH_TERMINAL=alacritty flosh target pick --picker fzf
+```
+
+Typed paths are supported:
+
+```text
+/tmp/some-existing-directory      selects that directory
+/tmp/new-directory + --create     creates and selects it
+relative/path + --create          creates below the current picker directory
 ```
 
 ## Screenshot commands
@@ -511,7 +529,7 @@ bindsym $mod+Shift+v exec "$HOME/.local/bin/flosh paste clipboard --backend xdot
 Pick target directory:
 
 ```sway
-bindsym $mod+Ctrl+p exec "$HOME/.local/bin/flosh target pick --start-current --create --picker fzf"
+bindsym $mod+Ctrl+p exec "$HOME/.local/bin/flosh target pick --start-current --create --picker fzf --terminal alacritty"
 ```
 
 ## Migration from shotdir

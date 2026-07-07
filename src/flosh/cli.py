@@ -252,6 +252,12 @@ def target_pick(
         envvar="FLOSH_PICKER",
         help="Picker backend: auto, fzf, wofi, rofi, stdin.",
     ),
+    terminal: str | None = typer.Option(
+        None,
+        "--terminal",
+        envvar="FLOSH_TERMINAL",
+        help="Terminal command used when fzf needs a GUI terminal.",
+    ),
     print_only: bool = typer.Option(
         False,
         "--print-only",
@@ -266,6 +272,7 @@ def target_pick(
         start_current=start_current,
     )
     selected_picker = picker or str(get_dotted(resolved.data, "capture.picker"))
+    selected_terminal = terminal or str(get_dotted(resolved.data, "tools.terminal"))
 
     try:
         selected = picker_mod.browse_directory(
@@ -274,6 +281,7 @@ def target_pick(
             include_hidden=include_hidden,
             allow_create=create,
             picker=selected_picker,
+            terminal=selected_terminal,
         )
     except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from None
