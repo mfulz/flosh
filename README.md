@@ -84,7 +84,6 @@ flosh config ...   inspect and manage config files
 flosh target ...   inspect and manage the active capture target directory
 flosh take ...     capture screenshots and route save/edit flows
 flosh paste ...    type clipboard or text into focused applications
-flosh waybar ...   emit Waybar JSON and helper actions
 flosh ocr ...      placeholder for future OCR flow
 ```
 
@@ -254,15 +253,19 @@ Show target:
 flosh target show
 flosh target show --short
 flosh target show --json
+flosh target show --json --text-mode compact --max-length 80
+flosh target show --json --text-mode basename
+flosh target show --json --text-mode path --max-length 0
 ```
 
-Waybar JSON shape:
+JSON output is generic enough for status bars such as Waybar:
 
 ```json
 {
-  "text": "Screenshots",
-  "tooltip": "/home/mfulz/Pictures/Screenshots",
-  "class": "flosh-target"
+  "alt": "/home/mfulz/Pictures/Screenshots",
+  "class": ["flosh-target", "exists"],
+  "text": "~/Pictures/Screenshots",
+  "tooltip": "/home/mfulz/Pictures/Screenshots"
 }
 ```
 
@@ -490,57 +493,38 @@ Planned behavior:
 
 ## Waybar integration
 
-`flosh waybar` exists so Waybar can call stable module-oriented commands instead
-of reassembling shell snippets everywhere. The target module is signal-driven by
-default, so changing the target can refresh Waybar immediately without polling.
+Waybar does not need a dedicated `flosh waybar` command. Use generic JSON output
+from `flosh target show --json` and keep Waybar-specific wiring in a module
+asset/snippet.
 
-Print the active capture target as Waybar custom JSON:
+A ready-to-copy example lives at:
 
-```bash
-flosh waybar target
-flosh waybar target --text-mode compact --max-length 80
-flosh waybar target --text-mode basename
-flosh waybar target --text-mode path --max-length 0
+```text
+examples/waybar/flosh-target.json
 ```
 
-Example output:
-
-```json
-{
-  "alt": "/home/mfulz/Pictures/Screenshots",
-  "class": ["flosh-target", "exists"],
-  "text": "Screenshots",
-  "tooltip": "/home/mfulz/Pictures/Screenshots"
-}
-```
-
-Print a ready-to-copy module snippet:
-
-```bash
-flosh waybar module
-flosh waybar module --signal 8 --picker fzf --terminal alacritty
-```
-
-Equivalent hand-written Waybar module:
+Current example:
 
 ```json
 "custom/flosh-target": {
-  "exec": "flosh waybar target",
+  "exec": "flosh target show --json --text-mode compact --max-length 80",
   "return-type": "json",
   "interval": "once",
   "signal": 8,
   "on-click": "flosh take",
-  "on-click-right": "flosh waybar pick-target --picker fzf --terminal alacritty --signal 8"
+  "on-click-right": "sh -c 'flosh target pick --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
 }
 ```
 
-Refresh manually if needed:
+Meaning:
 
-```bash
-flosh waybar refresh --signal 8
-```
+- module text shows the active target path from state
+- left click takes a screenshot with the configured default flow
+- right click opens the target picker
+- after a successful target pick, Waybar receives `RTMIN+8` and refreshes the
+  module immediately
 
-Take screenshot:
+Take screenshot as a separate button if wanted:
 
 ```json
 "custom/flosh-shot": {
@@ -550,7 +534,7 @@ Take screenshot:
 }
 ```
 
-Type clipboard into focused window:
+Type clipboard into focused window as a separate button if wanted:
 
 ```json
 "custom/flosh-paste": {
@@ -583,7 +567,7 @@ bindsym $mod+Shift+v exec "$HOME/.local/bin/flosh paste clipboard --backend xdot
 Pick target directory:
 
 ```sway
-bindsym $mod+Ctrl+p exec "$HOME/.local/bin/flosh waybar pick-target --picker fzf --terminal alacritty --signal 8"
+bindsym $mod+Ctrl+p exec "sh -c '$HOME/.local/bin/flosh target pick --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
 ```
 
 ## Migration from shotdir
