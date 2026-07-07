@@ -7,6 +7,19 @@ from pathlib import Path
 import typer
 
 from flosh import picker as picker_mod
+from flosh.capture import (
+    MENU_CANCEL,
+    MENU_SAVE,
+    MENU_SELECT_DIR,
+    MENU_SWAPPY,
+    CaptureMode,
+    CaptureSettings,
+    capture_raw_screenshot,
+    capture_screenshot,
+    edit_raw_capture,
+    notify,
+    save_raw_capture,
+)
 from flosh.config import (
     ConfigFormat,
     RuntimeContext,
@@ -40,7 +53,6 @@ target_app = typer.Typer(
 )
 take_app = typer.Typer(
     help="Capture screenshots and route them through save/edit flows.",
-    no_args_is_help=True,
 )
 paste_app = typer.Typer(
     help="Type clipboard or text into the focused application.",
@@ -267,10 +279,173 @@ def target_pick(
     typer.echo(selected)
 
 
+def capture_settings(
+    ctx: typer.Context,
+    *,
+    mode: CaptureMode | None,
+    filename_template: str | None,
+    no_swappy: bool,
+) -> CaptureSettings:
+    resolved = resolve_config(ctx_obj(ctx))
+    selected_mode = mode or str(get_dotted(resolved.data, "capture.default_mode"))
+    if selected_mode not in {"area", "screen", "output", "active", "window"}:
+        raise typer.BadParameter(f"unsupported capture mode: {selected_mode}")
+    return CaptureSettings(
+        target_dir=effective_target(resolved).expanduser(),
+        mode=selected_mode,  # type: ignore[arg-type]
+        filename_template=filename_template
+        if filename_template is not None
+        else str(get_dotted(resolved.data, "capture.filename_template")),
+        use_swappy=not no_swappy,
+        grimshot=str(get_dotted(resolved.data, "tools.grimshot")),
+        swappy=str(get_dotted(resolved.data, "tools.swappy")),
+        picker=str(get_dotted(resolved.data, "capture.picker")),
+    )
+
+
+def print_capture_result(path: Path, *, json_output: bool) -> None:
+    if json_output:
+        typer.echo(json.dumps({"path": str(path), "name": path.name}, sort_keys=True))
+    else:
+        typer.echo(path)
+
+
 @take_app.callback(invoke_without_command=True)
-def take_default() -> None:
+def take_default(
+    ctx: typer.Context,
+    mode: CaptureMode | None = typer.Option(
+        None,
+        "--mode",
+        envvar="FLOSH_CAPTURE_MODE",
+        help="Capture mode: area, screen, output, active, window.",
+    ),
+    filename_template: str | None = typer.Option(
+        None,
+        "--filename-template",
+        envvar="FLOSH_FILENAME_TEMPLATE",
+        help="strftime filename template for saved screenshots.",
+    ),
+    no_swappy: bool = typer.Option(
+        False,
+        "--no-swappy",
+        help="Save directly with grimshot instead of editing in swappy.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
     """Take a screenshot using configured defaults."""
-    typer.echo("not implemented yet")
+    if ctx.invoked_subcommand is not None:
+        return
+    settings = capture_settings(
+        ctx,
+        mode=mode,
+        filename_template=filename_template,
+        no_swappy=no_swappy,
+    )
+    try:
+        output = capture_screenshot(settings)
+    except (RuntimeError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from None
+    notify("Screenshot saved", output.name)
+    print_capture_result(output, json_output=json_output)
+
+
+@take_app.command("menu")
+def take_menu(
+    ctx: typer.Context,
+    mode: CaptureMode | None = typer.Option(
+        None,
+        "--mode",
+        envvar="FLOSH_CAPTURE_MODE",
+        help="Capture mode: area, screen, output, active, window.",
+    ),
+    filename_template: str | None = typer.Option(
+        None,
+        "--filename-template",
+        envvar="FLOSH_FILENAME_TEMPLATE",
+        help="strftime filename template for saved screenshots.",
+    ),
+    root: Path | None = typer.Option(
+        None,
+        "--root",
+        envvar="FLOSH_TARGET_ROOT",
+        help="Root directory used when changing target from the menu.",
+    ),
+    create: bool = typer.Option(False, "--create", help="Allow creating target directories."),
+    include_hidden: bool = typer.Option(False, "--include-hidden", help="Show hidden directories."),
+    picker: str | None = typer.Option(
+        None,
+        "--picker",
+        envvar="FLOSH_PICKER",
+        help="Picker backend: auto, fzf, wofi, rofi, stdin.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Capture once, then choose whether to edit/save directly/change target."""
+    settings = capture_settings(
+        ctx,
+        mode=mode,
+        filename_template=filename_template,
+        no_swappy=True,
+    )
+    resolved = resolve_config(ctx_obj(ctx))
+    selected_picker = picker or settings.picker
+    selected_root = (root.expanduser() if root else target_root(resolved)).resolve(strict=False)
+
+    try:
+        raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+    target_dir = settings.target_dir
+    try:
+        while True:
+            entries = [MENU_SWAPPY, MENU_SAVE, MENU_SELECT_DIR, MENU_CANCEL]
+            choice = picker_mod.pick_from_menu(
+                entries,
+                prompt=f"Screenshot action [{target_dir.name or target_dir}]",
+                picker=selected_picker,
+            )
+            if not choice or choice == MENU_CANCEL:
+                notify("Screenshot cancelled")
+                raise typer.Exit(1)
+            if choice == MENU_SELECT_DIR:
+                selected = picker_mod.browse_directory(
+                    selected_root,
+                    start=target_dir,
+                    include_hidden=include_hidden,
+                    allow_create=create,
+                    picker=selected_picker,
+                )
+                if selected is None:
+                    continue
+                target_dir = selected
+                update_target(state_path(resolved), target_dir, recent_limit=recent_limit(resolved))
+                notify("Screenshot target changed", str(target_dir))
+                continue
+            if choice == MENU_SAVE:
+                output = save_raw_capture(
+                    raw_path,
+                    target_dir=target_dir,
+                    filename_template=settings.filename_template,
+                )
+                notify("Screenshot saved", output.name)
+                print_capture_result(output, json_output=json_output)
+                return
+            if choice == MENU_SWAPPY:
+                output = edit_raw_capture(
+                    raw_path,
+                    target_dir=target_dir,
+                    filename_template=settings.filename_template,
+                    swappy=settings.swappy,
+                )
+                notify("Screenshot saved", output.name)
+                print_capture_result(output, json_output=json_output)
+                return
+            raise typer.BadParameter(f"unexpected menu choice: {choice}")
+    except (RuntimeError, ValueError, FileNotFoundError, NotADirectoryError) as exc:
+        raise typer.BadParameter(str(exc)) from None
+    finally:
+        raw_path.unlink(missing_ok=True)
 
 
 def paste_settings(

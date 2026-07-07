@@ -704,6 +704,12 @@ flosh paste clipboard --backend xdotool
 - `take` and `take menu`
 - target state integration
 
+Implemented baseline:
+
+- `flosh take`
+- `flosh take --no-swappy`
+- `flosh take menu` with save/swappy/target-change/cancel
+
 ### Phase 5: OCR
 
 - migrate OCR preprocessing and tesseract flow
