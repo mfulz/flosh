@@ -206,6 +206,7 @@ def format_target_text(target: Path, *, mode: TargetTextMode, max_length: int) -
 
 
 def target_json_payload(
+    resolved: ResolvedConfig,
     target: Path,
     *,
     mode: TargetTextMode,
@@ -216,10 +217,38 @@ def target_json_payload(
     classes.append("exists" if path.exists() else "missing")
     return {
         "text": format_target_text(path, mode=mode, max_length=max_length),
-        "tooltip": str(path),
+        "tooltip": target_tooltip(resolved, path),
         "class": classes,
         "alt": str(path),
     }
+
+
+def target_tooltip(resolved: ResolvedConfig, target: Path) -> str:
+    profile = resolved.profile or "default"
+    lines = [
+        "flosh",
+        f"target: {target}",
+        f"config: {resolved.path}",
+        f"profile: {profile}",
+        f"state: {state_path(resolved)}",
+        "",
+        "capture",
+        f"  mode: {get_dotted(resolved.data, 'capture.default_mode')}",
+        f"  destination: {get_dotted(resolved.data, 'capture.default_destination')}",
+        f"  filename: {get_dotted(resolved.data, 'capture.filename_template')}",
+        f"  picker: {get_dotted(resolved.data, 'capture.picker')}",
+        "",
+        "target picker",
+        f"  root: {Path(str(get_dotted(resolved.data, 'target.root'))).expanduser()}",
+        f"  start: {get_dotted(resolved.data, 'target.start')}",
+        f"  create: {get_dotted(resolved.data, 'target.create')}",
+        "",
+        "paste",
+        f"  backend: {get_dotted(resolved.data, 'paste.backend')}",
+        f"  wait_s: {get_dotted(resolved.data, 'paste.wait_s')}",
+        f"  delay_ms: {get_dotted(resolved.data, 'paste.delay_ms')}",
+    ]
+    return "\n".join(lines)
 
 
 @target_app.command("show")
@@ -243,7 +272,7 @@ def target_show(
     target = effective_target(resolved).expanduser()
 
     if json_output:
-        payload = target_json_payload(target, mode=text_mode, max_length=max_length)
+        payload = target_json_payload(resolved, target, mode=text_mode, max_length=max_length)
         typer.echo(json.dumps(payload, sort_keys=True))
         return
 

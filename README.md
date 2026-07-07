@@ -258,14 +258,16 @@ flosh target show --json --text-mode basename
 flosh target show --json --text-mode path --max-length 0
 ```
 
-JSON output is generic enough for status bars such as Waybar:
+JSON output is generic enough for status bars such as Waybar. The `tooltip`
+contains the relevant runtime configuration so hovering the module shows what
+config/profile/state and defaults are active:
 
 ```json
 {
   "alt": "/home/mfulz/Pictures/Screenshots",
   "class": ["flosh-target", "exists"],
   "text": "~/Pictures/Screenshots",
-  "tooltip": "/home/mfulz/Pictures/Screenshots"
+  "tooltip": "flosh\ntarget: /home/mfulz/Pictures/Screenshots\nconfig: /home/mfulz/.config/flosh/config.toml\nprofile: default\nstate: /home/mfulz/.local/state/flosh/state.toml\n\ncapture\n  mode: area\n  destination: clipboard\n  filename: %Y-%m-%d_%H-%M-%S.png\n  picker: auto\n\ntarget picker\n  root: /home/mfulz/Pictures\n  start: current\n  create: False\n\npaste\n  backend: xdotool\n  wait_s: 2.0\n  delay_ms: 80"
 }
 ```
 
