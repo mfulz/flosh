@@ -4,6 +4,7 @@
     "return-type": "json",
     "interval": "once",
     "signal": 8,
+    "tooltip": true,
     "on-click": "flosh take",
     "on-click-right": "sh -c 'flosh target pick --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
   }

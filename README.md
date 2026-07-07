@@ -513,6 +513,7 @@ Current example:
   "return-type": "json",
   "interval": "once",
   "signal": 8,
+  "tooltip": true,
   "on-click": "flosh take",
   "on-click-right": "sh -c 'flosh target pick --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
 }
@@ -521,6 +522,7 @@ Current example:
 Meaning:
 
 - module text shows the active target path from state
+- hover tooltip shows the active flosh runtime config
 - left click takes a screenshot with the configured default flow
 - right click opens the target picker
 - after a successful target pick, Waybar receives `RTMIN+8` and refreshes the
