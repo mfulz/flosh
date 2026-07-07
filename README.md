@@ -498,8 +498,8 @@ Print the active capture target as Waybar custom JSON:
 
 ```bash
 flosh waybar target
+flosh waybar target --text-mode compact --max-length 80
 flosh waybar target --text-mode basename
-flosh waybar target --text-mode compact --max-length 32
 flosh waybar target --text-mode path --max-length 0
 ```
 
@@ -525,12 +525,12 @@ Equivalent hand-written Waybar module:
 
 ```json
 "custom/flosh-target": {
-  "exec": "flosh waybar target --text-mode basename",
+  "exec": "flosh waybar target",
   "return-type": "json",
   "interval": "once",
   "signal": 8,
-  "on-click": "flosh waybar pick-target --picker fzf --terminal alacritty --signal 8",
-  "on-click-right": "flosh take menu"
+  "on-click": "flosh take",
+  "on-click-right": "flosh waybar pick-target --picker fzf --terminal alacritty --signal 8"
 }
 ```
 

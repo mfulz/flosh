@@ -783,12 +783,12 @@ def refresh_waybar(*, signal_number: int, process: str) -> None:
 def waybar_target(
     ctx: typer.Context,
     text_mode: WaybarTextMode = typer.Option(
-        "basename",
+        "compact",
         "--text-mode",
         help="Module text: basename, compact, or path.",
     ),
     max_length: int = typer.Option(
-        40,
+        80,
         "--max-length",
         help="Ellipsize module text from the left. Use 0 to disable.",
     ),
@@ -887,17 +887,17 @@ def waybar_module(
     """Print a ready-to-copy Waybar custom module snippet."""
     module = {
         "custom/flosh-target": {
-            "exec": "flosh waybar target --text-mode basename",
+            "exec": "flosh waybar target",
             "return-type": "json",
             "interval": "once",
             "signal": signal_number,
-            "on-click": (
+            "on-click": "flosh take",
+            "on-click-right": (
                 "flosh waybar pick-target "
                 f"--picker {shlex.quote(picker)} "
                 f"--terminal {shlex.quote(terminal)} "
                 f"--signal {signal_number}"
             ),
-            "on-click-right": "flosh take menu",
         }
     }
     typer.echo(json.dumps(module, indent=2, sort_keys=True))
