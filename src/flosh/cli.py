@@ -39,6 +39,7 @@ from flosh.config import (
 from flosh.config import (
     config_set as write_config_value,
 )
+from flosh.ocr import OcrSettings, capture_ocr_text, copy_text_to_clipboard, save_ocr_text
 from flosh.paste import Backend, PasteSettings, read_clipboard, type_text
 from flosh.state import effective_target, recent_limit, state_path, target_root, update_target
 
@@ -242,6 +243,11 @@ def target_tooltip(resolved: ResolvedConfig, target: Path) -> str:
         f"  root: {Path(str(get_dotted(resolved.data, 'target.root'))).expanduser()}",
         f"  start: {get_dotted(resolved.data, 'target.start')}",
         f"  create: {get_dotted(resolved.data, 'target.create')}",
+        "",
+        "ocr",
+        f"  lang: {get_dotted(resolved.data, 'ocr.lang')}",
+        f"  psm: {get_dotted(resolved.data, 'ocr.psm')}",
+        f"  preprocess: {get_dotted(resolved.data, 'ocr.preprocess')}",
         "",
         "paste",
         f"  backend: {get_dotted(resolved.data, 'paste.backend')}",
@@ -792,6 +798,86 @@ def paste_stdin(
 
 
 @ocr_app.command("capture")
-def ocr_capture() -> None:
-    """Capture an area and run OCR."""
-    typer.echo("not implemented yet")
+def ocr_capture(
+    ctx: typer.Context,
+    mode: CaptureMode | None = typer.Option(
+        None,
+        "--mode",
+        envvar="FLOSH_CAPTURE_MODE",
+        help="Capture mode: area, screen, output, active, window.",
+    ),
+    lang: str | None = typer.Option(
+        None,
+        "--lang",
+        envvar="FLOSH_OCR_LANG",
+        help="Tesseract language list, e.g. deu+eng.",
+    ),
+    psm: int | None = typer.Option(
+        None,
+        "--psm",
+        envvar="FLOSH_OCR_PSM",
+        help="Tesseract page segmentation mode.",
+    ),
+    preprocess: bool | None = typer.Option(
+        None,
+        "--preprocess/--no-preprocess",
+        help="Preprocess image before OCR. Defaults to ocr.preprocess.",
+    ),
+    save: bool = typer.Option(False, "--save", help="Also save recognized text as .txt."),
+    filename_template: str | None = typer.Option(
+        None,
+        "--filename-template",
+        envvar="FLOSH_FILENAME_TEMPLATE",
+        help="strftime filename template for saved OCR text.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    """Capture an area, run OCR, and copy recognized text to the clipboard."""
+    resolved = resolve_config(ctx_obj(ctx))
+    selected_mode = mode or str(get_dotted(resolved.data, "capture.default_mode"))
+    if selected_mode not in {"area", "screen", "output", "active", "window"}:
+        raise typer.BadParameter(f"unsupported capture mode: {selected_mode}")
+
+    settings = OcrSettings(
+        target_dir=effective_target(resolved).expanduser(),
+        mode=selected_mode,  # type: ignore[arg-type]
+        filename_template=filename_template
+        if filename_template is not None
+        else str(get_dotted(resolved.data, "capture.filename_template")),
+        lang=lang if lang is not None else str(get_dotted(resolved.data, "ocr.lang")),
+        psm=psm if psm is not None else int(get_dotted(resolved.data, "ocr.psm")),
+        preprocess=preprocess
+        if preprocess is not None
+        else bool(get_dotted(resolved.data, "ocr.preprocess")),
+        keep_preprocessed=bool(get_dotted(resolved.data, "ocr.keep_preprocessed")),
+        grimshot=str(get_dotted(resolved.data, "tools.grimshot")),
+        tesseract=str(get_dotted(resolved.data, "tools.tesseract")),
+        magick=str(get_dotted(resolved.data, "tools.magick")),
+        wl_copy=str(get_dotted(resolved.data, "tools.wl_copy")),
+    )
+    try:
+        text, preprocessed_path = capture_ocr_text(settings)
+        copy_text_to_clipboard(text, wl_copy=settings.wl_copy)
+        saved_path = (
+            save_ocr_text(
+                text,
+                target_dir=settings.target_dir,
+                filename_template=settings.filename_template,
+            )
+            if save
+            else None
+        )
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+    notify("OCR copied", f"{len(text)} chars")
+    if json_output:
+        payload = {
+            "chars": len(text),
+            "destination": "clipboard",
+            "saved_path": str(saved_path) if saved_path is not None else None,
+            "preprocessed_path": str(preprocessed_path) if preprocessed_path is not None else None,
+        }
+        typer.echo(json.dumps(payload, sort_keys=True))
+    elif save and saved_path is not None:
+        typer.echo(saved_path)

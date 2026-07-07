@@ -20,6 +20,7 @@ Implemented and usable now:
 - swappy screenshot flow
 - direct no-swappy screenshot output to clipboard or file
 - typing clipboard/text/stdin into the focused app (`xdotool`, `wtype`, `ydotool`)
+- OCR area capture to clipboard, optionally saved as `.txt`
 
 Planned, not implemented yet:
 
@@ -84,7 +85,7 @@ flosh config ...   inspect and manage config files
 flosh target ...   inspect and manage the active capture target directory
 flosh take ...     capture screenshots and route save/edit flows
 flosh paste ...    type clipboard or text into focused applications
-flosh ocr ...      placeholder for future OCR flow
+flosh ocr ...      capture screen text with OCR
 ```
 
 Global options:
@@ -479,19 +480,31 @@ tested with `xdotool`, while `wtype` produced incorrect input in that target.
 
 ## OCR commands
 
-OCR is not implemented yet. The placeholder command exists:
+OCR is intentionally capture-focused: select an area, recognize text, and copy the
+recognized text to the clipboard. This keeps the common flow tiny and predictable.
 
 ```bash
 flosh ocr capture
+flosh ocr capture --mode area
+flosh ocr capture --lang deu+eng --psm 6
+flosh ocr capture --no-preprocess
+flosh ocr capture --json
 ```
 
-Planned behavior:
+Save recognized text as `.txt` in the active target directory as well:
 
-- capture image
-- optionally preprocess with ImageMagick
+```bash
+flosh ocr capture --save
+flosh ocr capture --save --filename-template '%Y-%m-%d_%H-%M-%S.png'
+```
+
+Behavior:
+
+- capture image with the configured `grimshot` backend
+- optionally preprocess with ImageMagick (`ocr.preprocess`)
 - OCR with `tesseract`
-- copy or type recognized text
-- optionally save intermediate images for debugging
+- copy recognized text to the clipboard via `wl-copy`
+- optionally save recognized text as `.txt`
 
 ## Waybar integration
 
@@ -499,10 +512,14 @@ Waybar does not need a dedicated `flosh waybar` command. Use generic JSON output
 from `flosh target show --json` and keep Waybar-specific wiring in a module
 asset/snippet.
 
-A ready-to-copy example lives at:
+Ready-to-copy examples live at:
 
 ```text
 examples/waybar/flosh-target.json
+examples/waybar/flosh-shot.json
+examples/waybar/flosh-ocr.json
+examples/waybar/flosh-paste.json
+examples/waybar/modules.json
 ```
 
 Current example:
@@ -528,21 +545,27 @@ Meaning:
 - after a successful target pick, Waybar receives `RTMIN+8` and refreshes the
   module immediately
 
-Take screenshot as a separate button if wanted:
+Take screenshot as a separate text+icon button if wanted:
 
 ```json
 "custom/flosh-shot": {
-  "format": "",
+  "format": " Shot",
   "tooltip": "Take screenshot",
   "on-click": "flosh take"
 }
 ```
 
-Type clipboard into focused window as a separate button if wanted:
+OCR and paste can also be represented as text+icon buttons:
 
 ```json
+"custom/flosh-ocr": {
+  "format": "󰈙 OCR",
+  "tooltip": "OCR capture",
+  "on-click": "flosh ocr capture --mode area",
+  "on-click-right": "flosh ocr capture --mode area --save"
+},
 "custom/flosh-paste": {
-  "format": "󰅍",
+  "format": "󰅍 Paste",
   "tooltip": "Type clipboard into focused window",
   "on-click": "flosh paste clipboard --backend xdotool --wait-s 1 --delay-ms 80"
 }
@@ -584,7 +607,7 @@ bindsym $mod+Ctrl+p exec "sh -c '$HOME/.local/bin/flosh target pick --start-curr
 | `shotdir --take` | `flosh take` |
 | `shotdir --take --no-swappy` | `flosh take --no-swappy --save` |
 | `shotdir --menu` | `flosh take menu` |
-| `shotdir --ocr` | planned: `flosh ocr capture` |
+| `shotdir --ocr` | `flosh ocr capture` |
 
 ## Development
 
