@@ -18,40 +18,41 @@ ConfigFormat = Literal["toml", "json", "text"]
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "capture": {
+        "default_action": "take",
         "default_mode": "area",
-        "default_destination": "clipboard",
-        "default_profile": "satty",
-        "command": (
-            "{{screenshot}} | {{satty}} -f - -o {{destination}} "
-            "--actions-on-escape exit --early-exit save"
-        ),
-        "modes": {
-            "area": "{{grimshot}} save area -",
-            "screen": "{{grimshot}} save screen -",
-            "output": "{{grimshot}} save output -",
-            "active": "{{grimshot}} save active -",
-            "window": "{{grimshot}} save window -",
-        },
-        "vars": {},
+        "default_backend": "grimshot",
+        "default_frontend": "satty",
+        "default_destination": "file",
         "filename_template": "%Y-%m-%d_%H-%M-%S.png",
         "save_dir": "~/Pictures/Screenshots",
-        "editor": "satty",
         "picker": "auto",
-        "profiles": {
-            "satty": {
-                "destination": "file",
-            },
-            "raw-save": {
-                "destination": "file",
-                "command": "{{screenshot}} > {{destination}}",
-                "modes": {},
-            },
-            "clipboard": {
-                "destination": "clipboard",
-                "command": "{{screenshot}} | {{wl_copy}} --type image/png",
-                "modes": {},
+        "actions": {
+            "take": "{{backend}} | {{frontend}}",
+            "save": "{{backend}} > {{destination}}",
+        },
+        "backend": {
+            "grimshot": {
+                "area": "{{grimshot}} save area -",
+                "screen": "{{grimshot}} save screen -",
+                "output": "{{grimshot}} save output -",
+                "active": "{{grimshot}} save active -",
+                "window": "{{grimshot}} save window -",
             },
         },
+        "frontend": {
+            "satty": {
+                "command": (
+                    "{{satty}} -f - -o {{destination}} "
+                    "--actions-on-escape exit --early-exit save"
+                ),
+                "destination": "file",
+            },
+            "wlcopy": {
+                "command": "{{wl_copy}} --type image/png",
+                "destination": "clipboard",
+            },
+        },
+        "vars": {},
     },
     "target": {
         "root": "~/Pictures",
@@ -60,11 +61,29 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "recent_limit": 20,
     },
     "paste": {
-        "backend": "xdotool",
+        "default_action": "clipboard",
+        "default_backend": "xdotool",
         "keymap": "none",
         "wait_s": 2.0,
         "delay_ms": 80,
         "restore_clipboard": False,
+        "actions": {
+            "clipboard": "{{backend}}",
+            "text": "{{backend}}",
+            "stdin": "{{backend}}",
+        },
+        "backend": {
+            "xdotool": {
+                "command": "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} -- {{text}}",
+            },
+            "wtype": {
+                "command": "printf %s {{text}} | {{wtype}} -d {{delay_ms}} -",
+            },
+            "ydotool": {
+                "command": "{{ydotool}} type --delay {{delay_ms}} {{text}}",
+            },
+        },
+        "vars": {},
     },
     "ocr": {
         "lang": "deu+eng",
@@ -95,10 +114,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_CAPTURE_SAVE_DIR": ("capture.save_dir", str),
+    "FLOSH_CAPTURE_ACTION": ("capture.default_action", str),
     "FLOSH_CAPTURE_MODE": ("capture.default_mode", str),
+    "FLOSH_CAPTURE_BACKEND": ("capture.default_backend", str),
+    "FLOSH_CAPTURE_FRONTEND": ("capture.default_frontend", str),
     "FLOSH_CAPTURE_DESTINATION": ("capture.default_destination", str),
-    "FLOSH_CAPTURE_PROFILE": ("capture.default_profile", str),
-    "FLOSH_CAPTURE_EDITOR": ("capture.editor", str),
     "FLOSH_FILENAME_TEMPLATE": ("capture.filename_template", str),
     "FLOSH_TARGET_ROOT": ("target.root", str),
     "FLOSH_TARGET_START": ("target.start", str),
@@ -106,7 +126,8 @@ ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_PICKER": ("capture.picker", str),
     "FLOSH_TERMINAL": ("tools.terminal", str),
     "FLOSH_TERMINAL_CLASS": ("tools.terminal_class", str),
-    "FLOSH_PASTE_BACKEND": ("paste.backend", str),
+    "FLOSH_PASTE_ACTION": ("paste.default_action", str),
+    "FLOSH_PASTE_BACKEND": ("paste.default_backend", str),
     "FLOSH_PASTE_KEYMAP": ("paste.keymap", str),
     "FLOSH_PASTE_WAIT_S": ("paste.wait_s", float),
     "FLOSH_PASTE_DELAY_MS": ("paste.delay_ms", int),

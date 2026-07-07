@@ -29,11 +29,14 @@ class CaptureCancelled(RuntimeError):
 class CaptureCommandSettings:
     target_dir: Path
     mode: CaptureMode
+    action: str
+    backend_name: str
+    frontend_name: str
     filename_template: str
-    profile_name: str
     command: str
     destination: CaptureDestination
     variables: dict[str, str]
+    raw_variables: set[str]
 
 
 @dataclass(frozen=True)
@@ -71,42 +74,63 @@ def render_output_path(target_dir: Path, filename_template: str) -> Path:
 TEMPLATE_PATTERN = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}")
 
 
-def command_for_profile(capture: dict[str, Any], profile: dict[str, Any]) -> str:
-    for source in (profile, capture):
-        command = source.get("command")
-        if isinstance(command, str) and command.strip():
-            return command
-    raise ValueError("capture needs a non-empty command")
+def command_for_action(capture: dict[str, Any], action: str) -> str:
+    actions = capture.get("actions", {})
+    if not isinstance(actions, dict) or action not in actions:
+        raise ValueError(f"unsupported capture action: {action}; define capture.actions.{action}")
+    command = actions[action]
+    if isinstance(command, str) and command.strip():
+        return command
+    raise ValueError(f"capture.actions.{action} needs a non-empty command")
 
 
-def command_for_selected_mode(
+def command_for_backend_mode(capture: dict[str, Any], backend_name: str, mode: str) -> str:
+    backends = capture.get("backend", {})
+    if not isinstance(backends, dict) or backend_name not in backends:
+        raise ValueError(f"unsupported capture backend: {backend_name}")
+    backend = backends[backend_name]
+    if not isinstance(backend, dict):
+        raise ValueError(f"capture.backend.{backend_name} must be a table")
+    command = backend.get(mode)
+    if isinstance(command, str) and command.strip():
+        return command
+    raise ValueError(
+        f"unsupported capture mode for backend {backend_name}: {mode}; "
+        f"define capture.backend.{backend_name}.{mode}"
+    )
+
+
+def frontend_settings(
     capture: dict[str, Any],
-    profile: dict[str, Any],
-    mode: str,
-) -> str:
-    global_modes = capture.get("modes", {})
-    if not isinstance(global_modes, dict) or mode not in global_modes:
-        raise ValueError(f"unsupported capture mode: {mode}; define capture.modes.{mode}")
-    profile_modes = profile.get("modes", {})
-    if isinstance(profile_modes, dict):
-        extra_modes = sorted(str(key) for key in profile_modes if key not in global_modes)
-        if extra_modes:
-            raise ValueError(
-                "profile mode override not declared globally: " + ", ".join(extra_modes)
-            )
-        profile_command = profile_modes.get(mode)
-        if isinstance(profile_command, str) and profile_command.strip():
-            return profile_command
-    mode_command = global_modes[mode]
-    if isinstance(mode_command, str) and mode_command.strip():
-        return mode_command
-    raise ValueError(f"capture.modes.{mode} needs a non-empty command")
+    frontend_name: str,
+) -> tuple[str, CaptureDestination | None]:
+    frontends = capture.get("frontend", {})
+    if not isinstance(frontends, dict) or frontend_name not in frontends:
+        raise ValueError(f"unsupported capture frontend: {frontend_name}")
+    frontend = frontends[frontend_name]
+    if not isinstance(frontend, dict):
+        raise ValueError(f"capture.frontend.{frontend_name} must be a table")
+    command = frontend.get("command")
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError(f"capture.frontend.{frontend_name}.command needs a non-empty command")
+    destination = frontend.get("destination")
+    if destination is None:
+        return command, None
+    if destination == "clipboard":
+        return command, "clipboard"
+    if destination == "file":
+        return command, "file"
+    raise ValueError(f"unsupported capture.frontend.{frontend_name}.destination: {destination}")
 
 
-def destination_for_profile(
-    profile: dict[str, Any],
+def action_uses_frontend(command: str) -> bool:
+    return "{{frontend}}" in command
+
+
+def destination_for_capture(
     *,
     configured_default: str,
+    frontend_destination: CaptureDestination | None,
     save: bool,
     clipboard: bool,
 ) -> CaptureDestination:
@@ -116,12 +140,13 @@ def destination_for_profile(
         return "file"
     if clipboard:
         return "clipboard"
-    configured = str(profile.get("destination", configured_default))
-    if configured == "clipboard":
+    if frontend_destination is not None:
+        return frontend_destination
+    if configured_default == "clipboard":
         return "clipboard"
-    if configured == "file":
+    if configured_default == "file":
         return "file"
-    raise ValueError(f"unsupported capture destination: {configured}")
+    raise ValueError(f"unsupported capture.default_destination: {configured_default}")
 
 
 def run_capture_command(settings: CaptureCommandSettings) -> Path | None:
@@ -134,9 +159,11 @@ def run_capture_command(settings: CaptureCommandSettings) -> Path | None:
         "output_path": str(output_path),
         "target_dir": str(settings.target_dir),
         "filename": output_path.name,
-        "profile": settings.profile_name,
+        "action": settings.action,
+        "backend_name": settings.backend_name,
+        "frontend_name": settings.frontend_name,
     }
-    rendered = render_command_template(settings.command, values)
+    rendered = render_command_template(settings.command, values, raw_keys=settings.raw_variables)
     proc = subprocess.run(
         rendered,
         shell=True,
@@ -163,8 +190,13 @@ def run_capture_command(settings: CaptureCommandSettings) -> Path | None:
     return output_path
 
 
-def render_command_template(template: str, values: dict[str, str]) -> str:
-    return expand_template_value(template, values, stack=())
+def render_command_template(
+    template: str,
+    values: dict[str, str],
+    *,
+    raw_keys: set[str] | None = None,
+) -> str:
+    return expand_template_value(template, values, stack=(), raw_keys=raw_keys or set())
 
 
 def expand_template_value(
@@ -172,6 +204,7 @@ def expand_template_value(
     values: dict[str, str],
     *,
     stack: tuple[str, ...],
+    raw_keys: set[str],
 ) -> str:
     def replace(match: re.Match[str]) -> str:
         key = match.group(1)
@@ -181,8 +214,11 @@ def expand_template_value(
             cycle = " -> ".join((*stack, key))
             raise ValueError(f"recursive capture command template variable: {cycle}")
         value = values[key]
+        if key in raw_keys:
+            return expand_template_value(value, values, stack=(*stack, key), raw_keys=raw_keys)
         if TEMPLATE_PATTERN.search(value):
-            return expand_template_value(value, values, stack=(*stack, key))
+            expanded = expand_template_value(value, values, stack=(*stack, key), raw_keys=raw_keys)
+            return shlex.quote(expanded)
         return shlex.quote(value)
 
     return TEMPLATE_PATTERN.sub(replace, template)

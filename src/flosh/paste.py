@@ -3,22 +3,24 @@ from __future__ import annotations
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
-Backend = Literal["xdotool", "wtype", "ydotool"]
+from flosh.capture import render_command_template
+
 Keymap = Literal["none", "de-us"]
 
 
 @dataclass(frozen=True)
 class PasteSettings:
-    backend: Backend
+    action: str
+    backend_name: str
+    command: str
     keymap: Keymap
     wait_s: float
     delay_ms: int
     wl_paste: str
-    xdotool: str
-    wtype: str
-    ydotool: str
+    variables: dict[str, str]
+    raw_variables: set[str]
 
 
 def read_clipboard(*, wl_paste: str) -> str:
@@ -34,6 +36,29 @@ def read_clipboard(*, wl_paste: str) -> str:
     return proc.stdout
 
 
+def paste_action_command(paste: dict[str, Any], action: str) -> str:
+    actions = paste.get("actions", {})
+    if not isinstance(actions, dict) or action not in actions:
+        raise ValueError(f"unsupported paste action: {action}; define paste.actions.{action}")
+    command = actions[action]
+    if isinstance(command, str) and command.strip():
+        return command
+    raise ValueError(f"paste.actions.{action} needs a non-empty command")
+
+
+def paste_backend_command(paste: dict[str, Any], backend_name: str) -> str:
+    backends = paste.get("backend", {})
+    if not isinstance(backends, dict) or backend_name not in backends:
+        raise ValueError(f"unsupported paste backend: {backend_name}")
+    backend = backends[backend_name]
+    if not isinstance(backend, dict):
+        raise ValueError(f"paste.backend.{backend_name} must be a table")
+    command = backend.get("command")
+    if isinstance(command, str) and command.strip():
+        return command
+    raise ValueError(f"paste.backend.{backend_name}.command needs a non-empty command")
+
+
 def type_text(text: str, settings: PasteSettings) -> None:
     if settings.wait_s > 0:
         time.sleep(settings.wait_s)
@@ -41,16 +66,20 @@ def type_text(text: str, settings: PasteSettings) -> None:
     if not text:
         return
 
-    if settings.backend == "xdotool":
-        run_xdotool_type(apply_keymap(text, settings.keymap), settings)
-        return
-    if settings.backend == "wtype":
-        run_wtype(text, settings)
-        return
-    if settings.backend == "ydotool":
-        run_ydotool_type(text, settings)
-        return
-    raise ValueError(f"unsupported paste backend: {settings.backend}")
+    mapped_text = apply_keymap(text, settings.keymap)
+    rendered = render_command_template(
+        settings.command,
+        {
+            **settings.variables,
+            "backend": settings.variables["backend"],
+            "text": mapped_text,
+            "delay_ms": str(settings.delay_ms),
+            "action": settings.action,
+            "backend_name": settings.backend_name,
+        },
+        raw_keys=settings.raw_variables,
+    )
+    run_checked(rendered)
 
 
 def apply_keymap(text: str, keymap: Keymap) -> str:
@@ -61,35 +90,11 @@ def apply_keymap(text: str, keymap: Keymap) -> str:
     raise ValueError(f"unsupported paste keymap: {keymap}")
 
 
-def run_xdotool_type(text: str, settings: PasteSettings) -> None:
-    cmd = [
-        settings.xdotool,
-        "type",
-        "--clearmodifiers",
-        "--delay",
-        str(settings.delay_ms),
-        "--",
-        text,
-    ]
-    run_checked(cmd, input_text=None)
-
-
-def run_wtype(text: str, settings: PasteSettings) -> None:
-    cmd = [settings.wtype, "-d", str(settings.delay_ms), "-"]
-    run_checked(cmd, input_text=text)
-
-
-def run_ydotool_type(text: str, settings: PasteSettings) -> None:
-    # ydotool operates on the evdev/uinput layer. Its CLI has changed over time;
-    # keep this conservative and explicit instead of pretending it is as stable as xdotool.
-    cmd = [settings.ydotool, "type", "--delay", str(settings.delay_ms), text]
-    run_checked(cmd, input_text=None)
-
-
-def run_checked(cmd: list[str], *, input_text: str | None) -> None:
+def run_checked(command: str) -> None:
     proc = subprocess.run(
-        cmd,
-        input=input_text,
+        command,
+        shell=True,
+        executable="/bin/sh",
         text=True,
         capture_output=True,
         check=False,
@@ -98,4 +103,4 @@ def run_checked(cmd: list[str], *, input_text: str | None) -> None:
         stderr = (proc.stderr or "").strip()
         stdout = (proc.stdout or "").strip()
         details = stderr or stdout or f"exit code {proc.returncode}"
-        raise RuntimeError(f"command failed: {' '.join(cmd[:2])}: {details}")
+        raise RuntimeError(f"paste command failed: {details}")

@@ -18,7 +18,7 @@ Implemented and usable now:
 - active screenshot target state
 - interactive target picker (`wofi`, `rofi`, `fzf`, or stdin fallback)
 - Satty screenshot annotation flow
-- direct no-swappy screenshot output to clipboard or file
+- command-template based screenshot capture to editor, file, or clipboard
 - typing clipboard/text/stdin into the focused app (`xdotool`, `wtype`, `ydotool`)
 - OCR area capture to clipboard, optionally saved as `.txt`
 
@@ -83,7 +83,7 @@ Only tools needed by the command being used are required at runtime.
 ```bash
 flosh config ...   inspect and manage config files
 flosh target ...   inspect and manage the active capture target directory
-flosh take ...     capture screenshots and route save/edit flows
+flosh capture ...  capture screenshots via backend/frontend/action flows
 flosh paste ...    type clipboard or text into focused applications
 flosh ocr ...      capture screen text with OCR
 ```
@@ -131,37 +131,35 @@ Example config:
 
 ```toml
 [capture]
+default_action = "take"
 default_mode = "area"
-default_destination = "clipboard"
-default_profile = "satty"
-command = "{{screenshot}} | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+default_backend = "grimshot"
+default_frontend = "satty"
+default_destination = "file"
 filename_template = "%Y-%m-%d_%H-%M-%S.png"
 save_dir = "~/Pictures/Screenshots"
-editor = "satty"
 picker = "auto"
 
-[capture.modes]
+[capture.actions]
+take = "{{backend}} | {{frontend}}"
+save = "{{backend}} > {{destination}}"
+
+[capture.backend.grimshot]
 area = "{{grimshot}} save area -"
 screen = "{{grimshot}} save screen -"
 output = "{{grimshot}} save output -"
 active = "{{grimshot}} save active -"
 window = "{{grimshot}} save window -"
 
-[capture.vars]
-# Optional reusable command fragments. Values may reference other variables.
-# edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
-# satty_pipe = "{{screenshot}} | {{edit}}"
-
-[capture.profiles.satty]
+[capture.frontend.satty]
+command = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 destination = "file"
 
-[capture.profiles.raw-save]
-destination = "file"
-command = "{{screenshot}} > {{destination}}"
-
-[capture.profiles.clipboard]
+[capture.frontend.wlcopy]
+command = "{{wl_copy}} --type image/png"
 destination = "clipboard"
-command = "{{screenshot}} | {{wl_copy}} --type image/png"
+
+[capture.vars]
 
 [target]
 root = "~/Pictures"
@@ -170,11 +168,28 @@ create = false
 recent_limit = 20
 
 [paste]
-backend = "xdotool"
+default_action = "clipboard"
+default_backend = "xdotool"
 keymap = "none"
 wait_s = 2.0
 delay_ms = 80
 restore_clipboard = false
+
+[paste.actions]
+clipboard = "{{backend}}"
+text = "{{backend}}"
+stdin = "{{backend}}"
+
+[paste.backend.xdotool]
+command = "{{xdotool}} type --clearmodifiers --delay {{delay_ms}} -- {{text}}"
+
+[paste.backend.wtype]
+command = "printf %s {{text}} | {{wtype}} -d {{delay_ms}} -"
+
+[paste.backend.ydotool]
+command = "{{ydotool}} type --delay {{delay_ms}} {{text}}"
+
+[paste.vars]
 
 [ocr]
 lang = "deu+eng"
@@ -206,7 +221,7 @@ Profiles are nested below `[profiles.<name>]`:
 root = "~/Work/PRIVATE"
 
 [profiles.citrix.paste]
-backend = "xdotool"
+default_backend = "xdotool"
 wait_s = 1.0
 delay_ms = 100
 ```
@@ -227,8 +242,10 @@ FLOSH_CONFIG=./flosh.toml
 FLOSH_PROFILE=work
 FLOSH_VERBOSE=1
 FLOSH_CAPTURE_MODE=area
-FLOSH_CAPTURE_DESTINATION=clipboard
-FLOSH_CAPTURE_PROFILE=satty
+FLOSH_CAPTURE_ACTION=take
+FLOSH_CAPTURE_BACKEND=grimshot
+FLOSH_CAPTURE_FRONTEND=satty
+FLOSH_CAPTURE_DESTINATION=file
 FLOSH_CAPTURE_SAVE_DIR=/tmp/screens
 FLOSH_FILENAME_TEMPLATE='%Y-%m-%d_%H-%M-%S.png'
 FLOSH_TARGET_ROOT=/home/mfulz/Work/PRIVATE
@@ -238,6 +255,7 @@ FLOSH_PICKER=fzf
 FLOSH_TERMINAL=alacritty
 FLOSH_TERMINAL_CLASS=flosh-picker
 FLOSH_PASTE_BACKEND=xdotool
+FLOSH_PASTE_ACTION=clipboard
 FLOSH_PASTE_KEYMAP=de-us
 FLOSH_PASTE_WAIT_S=2
 FLOSH_PASTE_DELAY_MS=80
@@ -384,146 +402,84 @@ relative/path + --create          creates below the current picker directory
 
 ## Screenshot commands
 
-### Command-profile flow
-
 Default screenshot command:
 
 ```bash
-flosh take
+flosh capture
 ```
 
-`flosh take` is driven by global `capture.command` plus `capture.default_profile`.
-Profiles may override only the parts they need: `destination`, `command`, or
-individual `modes.<mode>` entries. `--mode` selects a globally declared
-`capture.modes.<mode>` entry; profile mode overrides must target one of those
-global modes. This keeps flosh focused on target-state, filenames,
-notifications, JSON output, and Waybar integration, while the actual screenshot
-pipeline stays configurable.
+`flosh capture` resolves one action, one backend, and optionally one frontend:
 
-Default Satty profile:
+```text
+--action take
+  capture.actions.take = "{{backend}} | {{frontend}}"
+
+--backend grimshot --mode area
+  capture.backend.grimshot.area = "{{grimshot}} save area -"
+
+--frontend satty
+  capture.frontend.satty.command = "{{satty}} -f - -o {{destination}} ..."
+```
+
+Default Satty flow:
 
 ```toml
 [capture]
-default_profile = "satty"
+default_action = "take"
 default_mode = "area"
-command = "{{screenshot}} | {{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
+default_backend = "grimshot"
+default_frontend = "satty"
 
-[capture.modes]
+actions.take = "{{backend}} | {{frontend}}"
+
+[capture.backend.grimshot]
 area = "{{grimshot}} save area -"
-screen = "{{grimshot}} save screen -"
-output = "{{grimshot}} save output -"
-active = "{{grimshot}} save active -"
 window = "{{grimshot}} save window -"
 
-[capture.vars]
-# Optional reusable command fragments. Values may reference other variables.
-# edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
-# satty_pipe = "{{screenshot}} | {{edit}}"
-
-[capture.profiles.satty]
+[capture.frontend.satty]
+command = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
 destination = "file"
 ```
 
-Supported template variables are shell-quoted automatically:
+Examples:
 
-- `{{screenshot}}` — selected `capture.modes.<mode>` command fragment
-- `{{destination}}` — output path for file profiles, `-` for clipboard profiles
+```bash
+flosh capture
+flosh capture --mode window
+flosh capture --action save
+flosh capture --action take --frontend wlcopy
+flosh capture --backend grimshot --frontend satty --json
+```
+
+Important guardrail: `--mode` is only a selector. It must exist under the selected
+backend, e.g. `capture.backend.grimshot.area`. The mode string is not interpolated
+into shell commands.
+
+Template variables are shell-quoted automatically:
+
+- `{{backend}}` — selected backend/mode command fragment
+- `{{frontend}}` — selected frontend command, if the action references it
+- `{{destination}}` — output path for file frontends/actions, `-` for clipboard
 - `{{output}}` / `{{output_path}}` — computed output path
 - `{{target_dir}}` — active target directory
 - `{{filename}}` — computed output filename
-- `{{profile}}` — selected capture profile name
+- `{{action}}`, `{{backend_name}}`, `{{frontend_name}}`
 - tool names from `[tools]`, e.g. `{{grimshot}}`, `{{satty}}`, `{{wl_copy}}`
-- custom fragments from `[capture.vars]` and `[capture.profiles.<profile>.vars]`
+- custom fragments from `[capture.vars]`
 
-Template values can be nested. Example:
+Template values can be nested:
 
 ```toml
 [capture]
-command = "{{satty_pipe}}"
+actions.take = "{{satty_pipe}}"
 
 [capture.vars]
 edit = "{{satty}} -f - -o {{destination}} --actions-on-escape exit --early-exit save"
-satty_pipe = "{{screenshot}} | {{edit}}"
+satty_pipe = "{{backend}} | {{edit}}"
 ```
 
 Expansion has cycle detection, so recursive fragments fail fast instead of
 looping forever.
-
-Capture modes stay uniform regardless of profile:
-
-```bash
-flosh take --mode area
-flosh take --mode screen
-flosh take --mode output
-flosh take --mode active
-flosh take --mode window
-```
-
-Select a different capture profile:
-
-```bash
-flosh take --capture-profile raw-save
-flosh take --capture-profile clipboard
-FLOSH_CAPTURE_PROFILE=clipboard flosh take
-```
-
-Resolution order for commands is:
-
-1. `--mode` must exist as `capture.modes.<mode>`
-2. screenshot fragment: `capture.profiles.<profile>.modes.<mode>` if present, else `capture.modes.<mode>`
-3. final command: `capture.profiles.<profile>.command` if present, else `capture.command`
-
-Built-in starter profiles:
-
-```toml
-[capture.profiles.raw-save]
-destination = "file"
-command = "{{screenshot}} > {{destination}}"
-
-[capture.profiles.clipboard]
-destination = "clipboard"
-command = "{{screenshot}} | {{wl_copy}} --type image/png"
-```
-
-Machine-readable output is only printed when requested:
-
-```bash
-flosh take --json
-flosh take --capture-profile raw-save --json
-```
-
-### Legacy direct output without editor
-
-`--no-swappy` keeps the old public name for now and bypasses command profiles.
-It uses flosh's internal direct output implementation.
-
-```bash
-flosh take --no-swappy
-flosh take --no-swappy --clipboard
-flosh take --no-swappy --save
-```
-
-### Menu flow
-
-```bash
-flosh take menu
-```
-
-Current menu entries:
-
-```text
-Edit/save in editor
-Save screenshot directly
-Select/change target directory
-Cancel
-```
-
-Notes:
-
-- `Edit/save in editor` opens the configured editor against the already captured raw screenshot.
-- `Save screenshot directly` saves the already captured raw screenshot without an editor.
-- `Select/change target directory` changes target state before choosing another action.
-- OCR is intentionally separate as `flosh ocr capture`.
 
 ## Paste commands
 
@@ -557,13 +513,17 @@ Type stdin:
 printf 'hello world\n' | flosh paste stdin
 ```
 
-Backends:
+Backends are configured through `paste.backend.<name>.command` and selected with
+`--backend` / `FLOSH_PASTE_BACKEND`:
 
 ```bash
 flosh paste clipboard --backend xdotool
 flosh paste clipboard --backend wtype
 flosh paste clipboard --backend ydotool
 ```
+
+The subcommands map to `paste.actions.clipboard`, `paste.actions.text`, and
+`paste.actions.stdin`; by default each action expands to `{{backend}}`.
 
 Current practical default is `xdotool`, because Citrix/Wfica as XWayland was
 tested with `xdotool`, while `wtype` produced incorrect input in that target.
@@ -621,7 +581,7 @@ Current example:
   "interval": "once",
   "signal": 8,
   "tooltip": true,
-  "on-click": "flosh take",
+  "on-click": "flosh capture",
   "on-click-right": "sh -c 'flosh target pick --start-current --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
 }
 ```
@@ -641,7 +601,7 @@ Take screenshot as a separate text+icon button if wanted:
 "custom/flosh-shot": {
   "format": " Shot",
   "tooltip": "Take screenshot",
-  "on-click": "flosh take"
+  "on-click": "flosh capture"
 }
 ```
 
@@ -674,13 +634,13 @@ for_window [app_id="flosh-picker"] move position center
 Screenshot via configured editor:
 
 ```sway
-bindsym $mod+p exec "$HOME/.local/bin/flosh take"
+bindsym $mod+p exec "$HOME/.local/bin/flosh capture"
 ```
 
-Screenshot menu:
+Save screenshot directly without editor:
 
 ```sway
-bindsym $mod+Shift+p exec "$HOME/.local/bin/flosh take menu"
+bindsym $mod+Shift+p exec "$HOME/.local/bin/flosh capture --action save"
 ```
 
 Type clipboard into focused app:
@@ -702,9 +662,9 @@ bindsym $mod+Ctrl+p exec "sh -c '$HOME/.local/bin/flosh target pick --start-curr
 | `shotdir --show` | `flosh target show` |
 | `shotdir --set PATH` | `flosh target set PATH` |
 | `shotdir --pick-under ROOT --create` | `flosh target pick --root ROOT --create` |
-| `shotdir --take` | `flosh take` |
-| `shotdir --take --no-swappy` | `flosh take --no-swappy --save` |
-| `shotdir --menu` | `flosh take menu` |
+| `shotdir --take` | `flosh capture` |
+| `shotdir --take --no-swappy` | `flosh capture --action save` |
+| `shotdir --menu` | choose `flosh capture --action ...` bindings |
 | `shotdir --ocr` | `flosh ocr capture` |
 
 ## Development

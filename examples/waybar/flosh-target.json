@@ -5,7 +5,7 @@
     "interval": "once",
     "signal": 8,
     "tooltip": true,
-    "on-click": "flosh take",
+    "on-click": "flosh capture",
     "on-click-right": "sh -c 'flosh target pick --start-current --picker fzf --terminal alacritty && pkill -RTMIN+8 waybar'"
   }
 }

@@ -9,25 +9,17 @@ import typer
 
 from flosh import picker as picker_mod
 from flosh.capture import (
-    MENU_CANCEL,
-    MENU_EDITOR,
-    MENU_SAVE,
-    MENU_SELECT_DIR,
     CaptureCancelled,
     CaptureCommandSettings,
     CaptureDestination,
     CaptureMode,
-    CaptureSettings,
-    capture_raw_screenshot,
-    capture_screenshot_to_clipboard,
-    capture_screenshot_to_file,
-    command_for_profile,
-    command_for_selected_mode,
-    destination_for_profile,
+    action_uses_frontend,
+    command_for_action,
+    command_for_backend_mode,
+    destination_for_capture,
+    frontend_settings,
     notify,
-    open_raw_in_editor,
     run_capture_command,
-    save_raw_capture,
 )
 from flosh.config import (
     ConfigFormat,
@@ -45,7 +37,14 @@ from flosh.config import (
     config_set as write_config_value,
 )
 from flosh.ocr import OcrSettings, capture_ocr_text, copy_text_to_clipboard, save_ocr_text
-from flosh.paste import Backend, Keymap, PasteSettings, read_clipboard, type_text
+from flosh.paste import (
+    Keymap,
+    PasteSettings,
+    paste_action_command,
+    paste_backend_command,
+    read_clipboard,
+    type_text,
+)
 from flosh.state import effective_target, recent_limit, state_path, target_root, update_target
 
 app = typer.Typer(
@@ -62,8 +61,8 @@ target_app = typer.Typer(
     help="Inspect and manage the active capture target directory.",
     no_args_is_help=True,
 )
-take_app = typer.Typer(
-    help="Capture screenshots and route them through save/edit flows.",
+capture_app = typer.Typer(
+    help="Capture screenshots and route them through backend/frontend/action flows.",
 )
 paste_app = typer.Typer(
     help="Type clipboard or text into the focused application.",
@@ -73,7 +72,7 @@ ocr_app = typer.Typer(help="Capture and OCR screen content.", no_args_is_help=Tr
 
 app.add_typer(config_app, name="config")
 app.add_typer(target_app, name="target")
-app.add_typer(take_app, name="take")
+app.add_typer(capture_app, name="capture")
 app.add_typer(paste_app, name="paste")
 app.add_typer(ocr_app, name="ocr")
 
@@ -239,8 +238,10 @@ def target_tooltip(resolved: ResolvedConfig, target: Path) -> str:
         f"state: {state_path(resolved)}",
         "",
         "capture",
+        f"  action: {get_dotted(resolved.data, 'capture.default_action')}",
         f"  mode: {get_dotted(resolved.data, 'capture.default_mode')}",
-        f"  profile: {get_dotted(resolved.data, 'capture.default_profile')}",
+        f"  backend: {get_dotted(resolved.data, 'capture.default_backend')}",
+        f"  frontend: {get_dotted(resolved.data, 'capture.default_frontend')}",
         f"  destination: {get_dotted(resolved.data, 'capture.default_destination')}",
         f"  filename: {get_dotted(resolved.data, 'capture.filename_template')}",
         f"  picker: {get_dotted(resolved.data, 'capture.picker')}",
@@ -256,7 +257,8 @@ def target_tooltip(resolved: ResolvedConfig, target: Path) -> str:
         f"  preprocess: {get_dotted(resolved.data, 'ocr.preprocess')}",
         "",
         "paste",
-        f"  backend: {get_dotted(resolved.data, 'paste.backend')}",
+        f"  action: {get_dotted(resolved.data, 'paste.default_action')}",
+        f"  backend: {get_dotted(resolved.data, 'paste.default_backend')}",
         f"  keymap: {get_dotted(resolved.data, 'paste.keymap')}",
         f"  wait_s: {get_dotted(resolved.data, 'paste.wait_s')}",
         f"  delay_ms: {get_dotted(resolved.data, 'paste.delay_ms')}",
@@ -423,36 +425,6 @@ def pick_target_interactive(
     return selected
 
 
-def capture_settings(
-    ctx: typer.Context,
-    *,
-    mode: CaptureMode | None,
-    filename_template: str | None,
-    no_swappy: bool,
-) -> CaptureSettings:
-    resolved = resolve_config(ctx_obj(ctx))
-    selected_mode = mode or str(get_dotted(resolved.data, "capture.default_mode"))
-    if selected_mode not in {"area", "screen", "output", "active", "window"}:
-        raise typer.BadParameter(f"unsupported capture mode: {selected_mode}")
-    selected_editor = str(get_dotted(resolved.data, "capture.editor"))
-    if selected_editor not in {"satty", "swappy"}:
-        raise typer.BadParameter(f"unsupported capture.editor: {selected_editor}")
-    return CaptureSettings(
-        target_dir=effective_target(resolved).expanduser(),
-        mode=selected_mode,
-        filename_template=filename_template
-        if filename_template is not None
-        else str(get_dotted(resolved.data, "capture.filename_template")),
-        use_swappy=not no_swappy,
-        editor=selected_editor,  # type: ignore[arg-type]
-        grimshot=str(get_dotted(resolved.data, "tools.grimshot")),
-        swappy=str(get_dotted(resolved.data, "tools.swappy")),
-        satty=str(get_dotted(resolved.data, "tools.satty")),
-        wl_copy=str(get_dotted(resolved.data, "tools.wl_copy")),
-        picker=str(get_dotted(resolved.data, "capture.picker")),
-    )
-
-
 def print_capture_result(path: Path, *, json_output: bool) -> None:
     if json_output:
         typer.echo(json.dumps({"path": str(path), "name": path.name}, sort_keys=True))
@@ -463,36 +435,37 @@ def print_clipboard_result(*, json_output: bool) -> None:
         typer.echo(json.dumps({"destination": "clipboard"}, sort_keys=True))
 
 
-
 def capture_command_settings(
     ctx: typer.Context,
     *,
+    action: str | None,
     mode: CaptureMode | None,
+    backend: str | None,
+    frontend: str | None,
     filename_template: str | None,
-    capture_profile: str | None,
     save: bool,
     clipboard: bool,
 ) -> CaptureCommandSettings:
     resolved = resolve_config(ctx_obj(ctx))
-    selected_mode = mode or str(get_dotted(resolved.data, "capture.default_mode"))
-
     capture = get_dotted(resolved.data, "capture")
     if not isinstance(capture, dict):
         raise typer.BadParameter("capture must be a table")
-    profile_name = capture_profile or str(get_dotted(resolved.data, "capture.default_profile"))
-    profiles = get_dotted(resolved.data, "capture.profiles")
-    if not isinstance(profiles, dict):
-        raise typer.BadParameter("capture.profiles must be a table")
-    profile = profiles.get(profile_name)
-    if not isinstance(profile, dict):
-        raise typer.BadParameter(f"unknown capture profile: {profile_name}")
+
+    selected_action = action or str(get_dotted(resolved.data, "capture.default_action"))
+    selected_mode = mode or str(get_dotted(resolved.data, "capture.default_mode"))
+    selected_backend = backend or str(get_dotted(resolved.data, "capture.default_backend"))
+    selected_frontend = frontend or str(get_dotted(resolved.data, "capture.default_frontend"))
 
     try:
-        command = command_for_profile(capture, profile)
-        mode_command = command_for_selected_mode(capture, profile, selected_mode)
-        destination = destination_for_profile(
-            profile,
+        command = command_for_action(capture, selected_action)
+        backend_command = command_for_backend_mode(capture, selected_backend, selected_mode)
+        frontend_command = ""
+        frontend_destination: CaptureDestination | None = None
+        if action_uses_frontend(command):
+            frontend_command, frontend_destination = frontend_settings(capture, selected_frontend)
+        destination = destination_for_capture(
             configured_default=str(get_dotted(resolved.data, "capture.default_destination")),
+            frontend_destination=frontend_destination,
             save=save,
             clipboard=clipboard,
         )
@@ -506,7 +479,9 @@ def capture_command_settings(
         else {}
     )
     capture_vars = capture.get("vars", {})
-    profile_vars = profile.get("vars", {})
+    raw_variable_names = (
+        {str(key) for key in capture_vars} if isinstance(capture_vars, dict) else set()
+    )
     custom_variables = {
         **tool_variables,
         **(
@@ -514,43 +489,24 @@ def capture_command_settings(
             if isinstance(capture_vars, dict)
             else {}
         ),
-        **(
-            {str(key): str(value) for key, value in profile_vars.items()}
-            if isinstance(profile_vars, dict)
-            else {}
-        ),
-        "screenshot": mode_command,
+        "backend": backend_command,
+        "frontend": frontend_command,
     }
+    raw_variable_names.update({"backend", "frontend"})
     return CaptureCommandSettings(
         target_dir=effective_target(resolved).expanduser(),
         mode=selected_mode,
+        action=selected_action,
+        backend_name=selected_backend,
+        frontend_name=selected_frontend,
         filename_template=filename_template
         if filename_template is not None
         else str(get_dotted(resolved.data, "capture.filename_template")),
-        profile_name=profile_name,
         command=command,
         destination=destination,
         variables=custom_variables,
+        raw_variables=raw_variable_names,
     )
-
-
-def capture_destination(
-    ctx: typer.Context,
-    *,
-    save: bool,
-    clipboard: bool,
-) -> CaptureDestination:
-    if save and clipboard:
-        raise typer.BadParameter("--save and --clipboard are mutually exclusive")
-    if save:
-        return "file"
-    if clipboard:
-        return "clipboard"
-    resolved = resolve_config(ctx_obj(ctx))
-    configured = str(get_dotted(resolved.data, "capture.default_destination"))
-    if configured not in {"clipboard", "file"}:
-        raise typer.BadParameter(f"unsupported capture.default_destination: {configured}")
-    return configured  # type: ignore[return-value]
 
 
 def default_pick_root_and_start(
@@ -587,8 +543,8 @@ def resolve_start_current(
     raise typer.BadParameter(f"unsupported target.start: {configured}")
 
 
-@take_app.callback(invoke_without_command=True)
-def take_default(
+@capture_app.callback(invoke_without_command=True)
+def capture_default(
     ctx: typer.Context,
     mode: CaptureMode | None = typer.Option(
         None,
@@ -602,16 +558,23 @@ def take_default(
         envvar="FLOSH_FILENAME_TEMPLATE",
         help="strftime filename template for saved screenshots.",
     ),
-    capture_profile: str | None = typer.Option(
+    action: str | None = typer.Option(
         None,
-        "--capture-profile",
-        envvar="FLOSH_CAPTURE_PROFILE",
-        help="Capture command profile from capture.profiles.",
+        "--action",
+        envvar="FLOSH_CAPTURE_ACTION",
+        help="Capture action from capture.actions, e.g. take or save.",
     ),
-    no_swappy: bool = typer.Option(
-        False,
-        "--no-swappy",
-        help="Legacy: bypass capture profiles and use flosh direct output.",
+    backend: str | None = typer.Option(
+        None,
+        "--backend",
+        envvar="FLOSH_CAPTURE_BACKEND",
+        help="Capture backend from capture.backend.",
+    ),
+    frontend: str | None = typer.Option(
+        None,
+        "--frontend",
+        envvar="FLOSH_CAPTURE_FRONTEND",
+        help="Capture frontend from capture.frontend.",
     ),
     save: bool = typer.Option(
         False,
@@ -629,37 +592,24 @@ def take_default(
     if ctx.invoked_subcommand is not None:
         return
     try:
-        if not no_swappy:
-            command_settings = capture_command_settings(
-                ctx,
-                mode=mode,
-                filename_template=filename_template,
-                capture_profile=capture_profile,
-                save=save,
-                clipboard=clipboard,
-            )
-            output = run_capture_command(command_settings)
-            if output is None:
-                notify("Screenshot copied", command_settings.profile_name)
-                print_clipboard_result(json_output=json_output)
-                return
-            notify("Screenshot saved", output.name)
-            print_capture_result(output, json_output=json_output)
-            return
-
-        settings = capture_settings(
+        command_settings = capture_command_settings(
             ctx,
+            action=action,
             mode=mode,
+            backend=backend,
+            frontend=frontend,
             filename_template=filename_template,
-            no_swappy=no_swappy,
+            save=save,
+            clipboard=clipboard,
         )
-        destination = capture_destination(ctx, save=save, clipboard=clipboard)
-        if destination == "clipboard":
-            capture_screenshot_to_clipboard(settings)
-            notify("Screenshot copied", "image/png")
+        output = run_capture_command(command_settings)
+        if output is None:
+            notify("Screenshot copied", command_settings.action)
             print_clipboard_result(json_output=json_output)
             return
-        output = capture_screenshot_to_file(settings)
+        notify("Screenshot saved", output.name)
+        print_capture_result(output, json_output=json_output)
+        return
     except CaptureCancelled:
         notify("Screenshot cancelled")
         raise typer.Exit(1) from None
@@ -669,157 +619,59 @@ def take_default(
     print_capture_result(output, json_output=json_output)
 
 
-@take_app.command("menu")
-def take_menu(
-    ctx: typer.Context,
-    mode: CaptureMode | None = typer.Option(
-        None,
-        "--mode",
-        envvar="FLOSH_CAPTURE_MODE",
-        help="Capture mode: area, screen, output, active, window.",
-    ),
-    filename_template: str | None = typer.Option(
-        None,
-        "--filename-template",
-        envvar="FLOSH_FILENAME_TEMPLATE",
-        help="strftime filename template for saved screenshots.",
-    ),
-    root: Path | None = typer.Option(
-        None,
-        "--root",
-        envvar="FLOSH_TARGET_ROOT",
-        help="Optional picker boundary when changing target from the menu.",
-    ),
-    create: bool | None = typer.Option(
-        None,
-        "--create/--no-create",
-        help="Allow creating target directories. Defaults to target.create.",
-    ),
-    include_hidden: bool = typer.Option(False, "--include-hidden", help="Show hidden directories."),
-    picker: str | None = typer.Option(
-        None,
-        "--picker",
-        envvar="FLOSH_PICKER",
-        help="Picker backend: auto, fzf, wofi, rofi, stdin.",
-    ),
-    terminal: str | None = typer.Option(
-        None,
-        "--terminal",
-        envvar="FLOSH_TERMINAL",
-        help="Terminal command used when fzf needs a GUI terminal.",
-    ),
-    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
-) -> None:
-    """Capture once, then choose whether to edit/save directly/change target."""
-    settings = capture_settings(
-        ctx,
-        mode=mode,
-        filename_template=filename_template,
-        no_swappy=True,
-    )
-    resolved = resolve_config(ctx_obj(ctx))
-    selected_picker = picker or settings.picker
-    selected_terminal = terminal or str(get_dotted(resolved.data, "tools.terminal"))
-    selected_terminal_class = str(get_dotted(resolved.data, "tools.terminal_class"))
-    create_missing = create
-    if create_missing is None:
-        create_missing = bool(get_dotted(resolved.data, "target.create"))
-    selected_root, _ = default_pick_root_and_start(
-        resolved,
-        explicit_root=root,
-        start_current=True,
-    )
-
-    try:
-        raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)
-    except RuntimeError as exc:
-        raise typer.BadParameter(str(exc)) from None
-
-    target_dir = settings.target_dir
-    try:
-        while True:
-            entries = [MENU_EDITOR, MENU_SAVE, MENU_SELECT_DIR, MENU_CANCEL]
-            choice = picker_mod.pick_from_menu(
-                entries,
-                prompt=f"Screenshot action [{target_dir.name or target_dir}]",
-                picker=selected_picker,
-                terminal=selected_terminal,
-            )
-            if not choice or choice == MENU_CANCEL:
-                notify("Screenshot cancelled")
-                raise typer.Exit(1)
-            if choice == MENU_SELECT_DIR:
-                selected = picker_mod.browse_directory(
-                    selected_root,
-                    start=target_dir,
-                    include_hidden=include_hidden,
-                    allow_create=create_missing,
-                    picker=selected_picker,
-                    terminal=selected_terminal,
-                    terminal_class=selected_terminal_class,
-                )
-                if selected is None:
-                    continue
-                target_dir = selected
-                update_target(state_path(resolved), target_dir, recent_limit=recent_limit(resolved))
-                notify("Screenshot target changed", str(target_dir))
-                continue
-            if choice == MENU_SAVE:
-                output = save_raw_capture(
-                    raw_path,
-                    target_dir=target_dir,
-                    filename_template=settings.filename_template,
-                )
-                notify("Screenshot saved", output.name)
-                print_capture_result(output, json_output=json_output)
-                return
-            if choice == MENU_EDITOR:
-                output = open_raw_in_editor(
-                    raw_path,
-                    target_dir=target_dir,
-                    filename_template=settings.filename_template,
-                    editor=settings.editor,
-                    swappy=settings.swappy,
-                    satty=settings.satty,
-                )
-                notify("Screenshot saved", output.name)
-                return
-            raise typer.BadParameter(f"unexpected menu choice: {choice}")
-    except CaptureCancelled:
-        notify("Screenshot cancelled")
-        raise typer.Exit(1) from None
-    except (RuntimeError, ValueError, FileNotFoundError, NotADirectoryError) as exc:
-        raise typer.BadParameter(str(exc)) from None
-    finally:
-        raw_path.unlink(missing_ok=True)
-
-
 def paste_settings(
     ctx: typer.Context,
     *,
-    backend: Backend | None,
+    action: str,
+    backend: str | None,
     keymap: Keymap | None,
     wait_s: float | None,
     delay_ms: int | None,
 ) -> PasteSettings:
     resolved = resolve_config(ctx_obj(ctx))
-    selected_backend = backend or str(get_dotted(resolved.data, "paste.backend"))
-    if selected_backend not in {"xdotool", "wtype", "ydotool"}:
-        raise typer.BadParameter(f"unsupported paste backend: {selected_backend}")
+    paste = get_dotted(resolved.data, "paste")
+    if not isinstance(paste, dict):
+        raise typer.BadParameter("paste must be a table")
+    selected_backend = backend or str(get_dotted(resolved.data, "paste.default_backend"))
     selected_keymap = keymap or str(get_dotted(resolved.data, "paste.keymap"))
     if selected_keymap not in {"none", "de-us"}:
         raise typer.BadParameter(f"unsupported paste keymap: {selected_keymap}")
+    try:
+        backend_command = paste_backend_command(paste, selected_backend)
+        action_command = paste_action_command(paste, action)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+    tools = get_dotted(resolved.data, "tools")
+    tool_variables = (
+        {str(key): str(value) for key, value in tools.items() if not isinstance(value, dict)}
+        if isinstance(tools, dict)
+        else {}
+    )
+    paste_vars = paste.get("vars", {})
+    raw_variable_names = {str(key) for key in paste_vars} if isinstance(paste_vars, dict) else set()
+    variables = {
+        **tool_variables,
+        **(
+            {str(key): str(value) for key, value in paste_vars.items()}
+            if isinstance(paste_vars, dict)
+            else {}
+        ),
+        "backend": backend_command,
+    }
+    raw_variable_names.add("backend")
     return PasteSettings(
-        backend=selected_backend,  # type: ignore[arg-type]
+        action=action,
+        backend_name=selected_backend,
+        command=action_command,
         keymap=selected_keymap,  # type: ignore[arg-type]
         wait_s=wait_s if wait_s is not None else float(get_dotted(resolved.data, "paste.wait_s")),
         delay_ms=delay_ms
         if delay_ms is not None
         else int(get_dotted(resolved.data, "paste.delay_ms")),
         wl_paste=str(get_dotted(resolved.data, "tools.wl_paste")),
-        xdotool=str(get_dotted(resolved.data, "tools.xdotool")),
-        wtype=str(get_dotted(resolved.data, "tools.wtype")),
-        ydotool=str(get_dotted(resolved.data, "tools.ydotool")),
+        variables=variables,
+        raw_variables=raw_variable_names,
     )
 
 
@@ -833,7 +685,13 @@ def run_paste(text: str, settings: PasteSettings) -> None:
 @paste_app.command("clipboard")
 def paste_clipboard(
     ctx: typer.Context,
-    backend: Backend | None = typer.Option(
+    action: str | None = typer.Option(
+        None,
+        "--action",
+        envvar="FLOSH_PASTE_ACTION",
+        help="Paste action from paste.actions. Defaults to clipboard.",
+    ),
+    backend: str | None = typer.Option(
         None,
         "--backend",
         envvar="FLOSH_PASTE_BACKEND",
@@ -859,7 +717,14 @@ def paste_clipboard(
     ),
 ) -> None:
     """Type the current clipboard into the focused application."""
-    settings = paste_settings(ctx, backend=backend, keymap=keymap, wait_s=wait_s, delay_ms=delay_ms)
+    settings = paste_settings(
+        ctx,
+        action=action or "clipboard",
+        backend=backend,
+        keymap=keymap,
+        wait_s=wait_s,
+        delay_ms=delay_ms,
+    )
     try:
         text = read_clipboard(wl_paste=settings.wl_paste)
     except RuntimeError as exc:
@@ -871,7 +736,13 @@ def paste_clipboard(
 def paste_text(
     ctx: typer.Context,
     text: str = typer.Argument(..., help="Literal text to type."),
-    backend: Backend | None = typer.Option(
+    action: str | None = typer.Option(
+        None,
+        "--action",
+        envvar="FLOSH_PASTE_ACTION",
+        help="Paste action from paste.actions. Defaults to text.",
+    ),
+    backend: str | None = typer.Option(
         None,
         "--backend",
         envvar="FLOSH_PASTE_BACKEND",
@@ -897,14 +768,27 @@ def paste_text(
     ),
 ) -> None:
     """Type literal text into the focused application."""
-    settings = paste_settings(ctx, backend=backend, keymap=keymap, wait_s=wait_s, delay_ms=delay_ms)
+    settings = paste_settings(
+        ctx,
+        action=action or "text",
+        backend=backend,
+        keymap=keymap,
+        wait_s=wait_s,
+        delay_ms=delay_ms,
+    )
     run_paste(text, settings)
 
 
 @paste_app.command("stdin")
 def paste_stdin(
     ctx: typer.Context,
-    backend: Backend | None = typer.Option(
+    action: str | None = typer.Option(
+        None,
+        "--action",
+        envvar="FLOSH_PASTE_ACTION",
+        help="Paste action from paste.actions. Defaults to stdin.",
+    ),
+    backend: str | None = typer.Option(
         None,
         "--backend",
         envvar="FLOSH_PASTE_BACKEND",
@@ -930,7 +814,14 @@ def paste_stdin(
     ),
 ) -> None:
     """Read stdin and type it into the focused application."""
-    settings = paste_settings(ctx, backend=backend, keymap=keymap, wait_s=wait_s, delay_ms=delay_ms)
+    settings = paste_settings(
+        ctx,
+        action=action or "stdin",
+        backend=backend,
+        keymap=keymap,
+        wait_s=wait_s,
+        delay_ms=delay_ms,
+    )
     run_paste(sys.stdin.read(), settings)
 
 
