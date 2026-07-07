@@ -40,7 +40,7 @@ from flosh.ocr import OcrSettings, capture_ocr_text, copy_text_to_clipboard, sav
 from flosh.paste import (
     PasteSettings,
     paste_action_command,
-    paste_backend_settings,
+    paste_backend_command,
     read_clipboard,
     type_text,
 )
@@ -631,7 +631,7 @@ def paste_settings(
         raise typer.BadParameter("paste must be a table")
     selected_backend = backend or str(get_dotted(resolved.data, "paste.default_backend"))
     try:
-        backend_command, newline, pre_command = paste_backend_settings(paste, selected_backend)
+        backend_command = paste_backend_command(paste, selected_backend)
         action_command = paste_action_command(paste, action)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from None
@@ -658,8 +658,6 @@ def paste_settings(
         action=action,
         backend_name=selected_backend,
         command=action_command,
-        newline=newline,
-        pre_command=pre_command,
         wait_s=wait_s if wait_s is not None else float(get_dotted(resolved.data, "paste.wait_s")),
         delay_ms=delay_ms
         if delay_ms is not None
