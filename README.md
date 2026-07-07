@@ -170,6 +170,7 @@ Both paths can be overridden.
 ```toml
 [capture]
 default_mode = "area"
+default_destination = "clipboard"
 filename_template = "%Y-%m-%d_%H-%M-%S.png"
 save_dir = "~/Pictures/Screenshots"
 editor = "swappy"
@@ -444,11 +445,9 @@ child-directory/
 flosh take
 ```
 
-Equivalent explicit form:
-
-```bash
-flosh take screenshot
-```
+By default this captures an image and copies it to the Wayland clipboard as
+`image/png`. It does not write a permanent screenshot file unless configured or
+asked explicitly.
 
 ### Capture modes
 
@@ -460,51 +459,48 @@ flosh take --mode active
 flosh take --mode window
 ```
 
-### Save directly
+### Save to the active target directory
 
 ```bash
-flosh take --no-editor
+flosh take --save
 ```
 
-### Open in editor
+By default `--save` opens the capture in `swappy` and writes the result to the
+active target directory. To save directly with `grimshot` instead:
 
 ```bash
-flosh take --editor swappy
+flosh take --save --no-swappy
 ```
 
-### Override save directory for one command
+To make file output the default in a config/profile:
 
 ```bash
-flosh take --save-dir /tmp/screens
+flosh config set capture.default_destination file
 ```
 
-or:
+Or for one process environment:
 
 ```bash
-FLOSH_CAPTURE_SAVE_DIR=/tmp/screens flosh take
+FLOSH_CAPTURE_DESTINATION=file flosh take
 ```
 
 ### Menu flow
-
-The existing `shotdir --menu` concept should become:
 
 ```bash
 flosh take menu
 ```
 
-Planned menu entries:
+Current menu entries:
 
 ```text
-Edit/save screenshot
+Edit/save in swappy
 Save screenshot directly
-OCR -> clipboard
-OCR -> clipboard + edit/save screenshot
 Select/change target directory
 Cancel
 ```
 
-Later this can become a tray or overlay menu without changing the backend
-commands.
+OCR actions are planned as a follow-up once the capture core is stable. Later
+this can become a tray or overlay menu without changing the backend commands.
 
 ## Paste commands
 
@@ -660,8 +656,8 @@ Existing `shotdir` features to migrate first:
 | `shotdir --show` | `flosh target show` |
 | `shotdir --set PATH` | `flosh target set PATH` |
 | `shotdir --pick-under ROOT --create` | `flosh target pick --root ROOT --create` |
-| `shotdir --take` | `flosh take` |
-| `shotdir --take --no-swappy` | `flosh take --no-editor` |
+| `shotdir --take` | `flosh take --save` |
+| `shotdir --take --no-swappy` | `flosh take --save --no-swappy` |
 | `shotdir --ocr` | `flosh ocr capture --copy` |
 | `shotdir --menu` | `flosh take menu` |
 
@@ -706,8 +702,9 @@ flosh paste clipboard --backend xdotool
 
 Implemented baseline:
 
-- `flosh take`
-- `flosh take --no-swappy`
+- `flosh take` clipboard-first default
+- `flosh take --save`
+- `flosh take --save --no-swappy`
 - `flosh take menu` with save/swappy/target-change/cancel
 
 ### Phase 5: OCR

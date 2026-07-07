@@ -12,16 +12,19 @@ from flosh.capture import (
     MENU_SAVE,
     MENU_SELECT_DIR,
     MENU_SWAPPY,
+    CaptureDestination,
     CaptureMode,
     CaptureSettings,
     capture_raw_screenshot,
-    capture_screenshot,
+    capture_screenshot_to_clipboard,
+    capture_screenshot_to_file,
     edit_raw_capture,
     notify,
     save_raw_capture,
 )
 from flosh.config import (
     ConfigFormat,
+    ResolvedConfig,
     RuntimeContext,
     config_get,
     edit_config,
@@ -233,7 +236,7 @@ def target_pick(
         None,
         "--root",
         envvar="FLOSH_TARGET_ROOT",
-        help="Root directory used as picker boundary.",
+        help="Optional picker boundary. Defaults to / and starts at target.root.",
     ),
     start_current: bool = typer.Option(
         False,
@@ -256,9 +259,12 @@ def target_pick(
 ) -> None:
     """Interactively choose the active capture target directory."""
     resolved = resolve_config(ctx_obj(ctx))
-    selected_root = (root.expanduser() if root else target_root(resolved)).resolve(strict=False)
+    selected_root, start = default_pick_root_and_start(
+        resolved,
+        explicit_root=root,
+        start_current=start_current,
+    )
     selected_picker = picker or str(get_dotted(resolved.data, "capture.picker"))
-    start = effective_target(resolved) if start_current else None
 
     try:
         selected = picker_mod.browse_directory(
@@ -299,6 +305,7 @@ def capture_settings(
         use_swappy=not no_swappy,
         grimshot=str(get_dotted(resolved.data, "tools.grimshot")),
         swappy=str(get_dotted(resolved.data, "tools.swappy")),
+        wl_copy=str(get_dotted(resolved.data, "tools.wl_copy")),
         picker=str(get_dotted(resolved.data, "capture.picker")),
     )
 
@@ -308,6 +315,51 @@ def print_capture_result(path: Path, *, json_output: bool) -> None:
         typer.echo(json.dumps({"path": str(path), "name": path.name}, sort_keys=True))
     else:
         typer.echo(path)
+
+
+def print_clipboard_result(*, json_output: bool) -> None:
+    if json_output:
+        typer.echo(json.dumps({"destination": "clipboard"}, sort_keys=True))
+    else:
+        typer.echo("clipboard")
+
+
+def capture_destination(
+    ctx: typer.Context,
+    *,
+    save: bool,
+    clipboard: bool,
+) -> CaptureDestination:
+    if save and clipboard:
+        raise typer.BadParameter("--save and --clipboard are mutually exclusive")
+    if save:
+        return "file"
+    if clipboard:
+        return "clipboard"
+    resolved = resolve_config(ctx_obj(ctx))
+    configured = str(get_dotted(resolved.data, "capture.default_destination"))
+    if configured not in {"clipboard", "file"}:
+        raise typer.BadParameter(f"unsupported capture.default_destination: {configured}")
+    return configured  # type: ignore[return-value]
+
+
+def default_pick_root_and_start(
+    resolved_config: ResolvedConfig,
+    *,
+    explicit_root: Path | None,
+    start_current: bool,
+) -> tuple[Path, Path | None]:
+    if explicit_root is not None:
+        root = explicit_root.expanduser().resolve(strict=False)
+        start = effective_target(resolved_config).expanduser() if start_current else None
+        return root, start
+    root = Path("/")
+    start = (
+        effective_target(resolved_config).expanduser()
+        if start_current
+        else target_root(resolved_config).expanduser()
+    )
+    return root, start
 
 
 @take_app.callback(invoke_without_command=True)
@@ -328,7 +380,17 @@ def take_default(
     no_swappy: bool = typer.Option(
         False,
         "--no-swappy",
-        help="Save directly with grimshot instead of editing in swappy.",
+        help="When saving to file, save directly with grimshot instead of editing in swappy.",
+    ),
+    save: bool = typer.Option(
+        False,
+        "--save",
+        help="Save screenshot to the active target directory instead of clipboard.",
+    ),
+    clipboard: bool = typer.Option(
+        False,
+        "--clipboard",
+        help="Copy screenshot image to clipboard instead of saving a file.",
     ),
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
@@ -341,8 +403,14 @@ def take_default(
         filename_template=filename_template,
         no_swappy=no_swappy,
     )
+    destination = capture_destination(ctx, save=save, clipboard=clipboard)
     try:
-        output = capture_screenshot(settings)
+        if destination == "clipboard":
+            capture_screenshot_to_clipboard(settings)
+            notify("Screenshot copied", "image/png")
+            print_clipboard_result(json_output=json_output)
+            return
+        output = capture_screenshot_to_file(settings)
     except (RuntimeError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from None
     notify("Screenshot saved", output.name)
@@ -368,7 +436,7 @@ def take_menu(
         None,
         "--root",
         envvar="FLOSH_TARGET_ROOT",
-        help="Root directory used when changing target from the menu.",
+        help="Optional picker boundary when changing target from the menu.",
     ),
     create: bool = typer.Option(False, "--create", help="Allow creating target directories."),
     include_hidden: bool = typer.Option(False, "--include-hidden", help="Show hidden directories."),
@@ -389,7 +457,11 @@ def take_menu(
     )
     resolved = resolve_config(ctx_obj(ctx))
     selected_picker = picker or settings.picker
-    selected_root = (root.expanduser() if root else target_root(resolved)).resolve(strict=False)
+    selected_root, _ = default_pick_root_and_start(
+        resolved,
+        explicit_root=root,
+        start_current=True,
+    )
 
     try:
         raw_path = capture_raw_screenshot(grimshot=settings.grimshot, mode=settings.mode)

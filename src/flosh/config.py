@@ -19,6 +19,7 @@ ConfigFormat = Literal["toml", "json", "text"]
 DEFAULT_CONFIG: dict[str, Any] = {
     "capture": {
         "default_mode": "area",
+        "default_destination": "clipboard",
         "filename_template": "%Y-%m-%d_%H-%M-%S.png",
         "save_dir": "~/Pictures/Screenshots",
         "editor": "swappy",
@@ -62,6 +63,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_CAPTURE_SAVE_DIR": ("capture.save_dir", str),
     "FLOSH_CAPTURE_MODE": ("capture.default_mode", str),
+    "FLOSH_CAPTURE_DESTINATION": ("capture.default_destination", str),
     "FLOSH_CAPTURE_EDITOR": ("capture.editor", str),
     "FLOSH_FILENAME_TEMPLATE": ("capture.filename_template", str),
     "FLOSH_TARGET_ROOT": ("target.root", str),
