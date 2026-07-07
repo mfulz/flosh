@@ -1,4 +1,4 @@
-# Maintainer: Matthias Fulz <mfulz@evia.de>
+# Maintainer: Matthias Fulz <mfulz@olznet.de>
 
 pkgname=flosh
 pkgver=0.1.0
@@ -23,7 +23,8 @@ optdepends=(
   'sway-contrib: grimshot screenshot backend'
   'grim: low-level Wayland screenshot tool used by grimshot'
   'slurp: Wayland area selection used by grimshot'
-  'swappy: interactive screenshot editor'
+  'satty: default interactive screenshot editor'
+  'swappy: legacy interactive screenshot editor'
   'wl-clipboard: Wayland clipboard integration'
   'xdotool: X11/XWayland typing backend, useful for Citrix/Wfica'
   'wtype: Wayland typing backend'
@@ -33,11 +34,11 @@ optdepends=(
   'rofi: dmenu target picker'
   'alacritty: default terminal for GUI-launched fzf'
   'libnotify: desktop notifications via notify-send'
-  'tesseract: future OCR support'
-  'imagemagick: future OCR preprocessing support'
+  'tesseract: OCR support'
+  'imagemagick: OCR preprocessing support'
 )
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('060ff5e8ad97571c7b32a5040413c20f6eb20f25bcab20abc966a3a2ad70b945')
 
 build() {
   cd "${pkgname}-${pkgver}"

@@ -7,3 +7,11 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Arch package build artifacts
+*.pkg.tar*
+*.src.tar*
+packaging/**/*.tar.gz
+packaging/**/src/
+packaging/**/pkg/
+packaging/arch-git/flosh/

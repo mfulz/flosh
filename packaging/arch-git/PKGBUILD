@@ -1,8 +1,8 @@
-# Maintainer: Matthias Fulz <mfulz@evia.de>
+# Maintainer: Matthias Fulz <mfulz@olznet.de>
 
 pkgname=flosh-git
 _pkgname=flosh
-pkgver=0.1.0.r0.g0000000
+pkgver=0.1.0.r0.ga5c3366
 pkgrel=1
 pkgdesc='Wayland-first capture, clipboard typing, and screenshot target workflow CLI'
 arch=('any')
@@ -27,7 +27,8 @@ optdepends=(
   'sway-contrib: grimshot screenshot backend'
   'grim: low-level Wayland screenshot tool used by grimshot'
   'slurp: Wayland area selection used by grimshot'
-  'swappy: interactive screenshot editor'
+  'satty: default interactive screenshot editor'
+  'swappy: legacy interactive screenshot editor'
   'wl-clipboard: Wayland clipboard integration'
   'xdotool: X11/XWayland typing backend, useful for Citrix/Wfica'
   'wtype: Wayland typing backend'
@@ -37,8 +38,8 @@ optdepends=(
   'rofi: dmenu target picker'
   'alacritty: default terminal for GUI-launched fzf'
   'libnotify: desktop notifications via notify-send'
-  'tesseract: future OCR support'
-  'imagemagick: future OCR preprocessing support'
+  'tesseract: OCR support'
+  'imagemagick: OCR preprocessing support'
 )
 source=("${_pkgname}::git+${url}.git")
 sha256sums=('SKIP')
@@ -47,8 +48,8 @@ pkgver() {
   cd "${_pkgname}"
 
   if git describe --long --tags --abbrev=7 >/dev/null 2>&1; then
-    git describe --long --tags --abbrev=7 \
-      | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+    git describe --long --tags --abbrev=7 |
+      sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
     return
   fi
 
