@@ -1,108 +1,58 @@
 # flosh
 
-`flosh` is a Wayland-first workflow tool for screenshots, capture targets, OCR,
-and clipboard-to-keyboard typing.
+`flosh` is a small Wayland-first workflow CLI for screenshot target management,
+swappy-based captures, and clipboard-to-keyboard typing.
 
-It starts as a robust CLI backend and is intentionally designed so a later tray
-icon, Waybar integration, or layer-shell overlay can call the same stable commands
-instead of reimplementing the workflow logic.
+It is intentionally CLI-first: Sway bindings, Waybar modules, a future tray icon,
+or a future overlay should call the same commands instead of reimplementing the
+workflow logic.
 
-The name is short for **flowshot**: capture and text flows around screenshots,
-clipboard content, OCR, and focused application input.
+Current primary target: **Sway / wlroots / Wayland**.
 
-## Goals
+## Current status
 
-`flosh` is built for keyboard-heavy Linux/Wayland workflows where screenshots are
-not just images. A capture might become:
+Implemented and usable now:
 
-- a saved screenshot in the current project/workspace directory
-- an image opened in an editor such as `swappy`
-- OCR text copied to the Wayland clipboard
-- OCR text typed into a focused application
-- clipboard text typed into an XWayland-only application such as Citrix/Wfica
-- a Waybar-visible state value such as the current capture target directory
+- config file loading and editing
+- profile and environment overrides
+- active screenshot target state
+- interactive target picker (`wofi`, `rofi`, `fzf`, or stdin fallback)
+- swappy screenshot flow
+- direct no-swappy screenshot output to clipboard or file
+- typing clipboard/text/stdin into the focused app (`xdotool`, `wtype`, `ydotool`)
 
-The first implementation target is Sway/Wayland, but the core concepts are not
-Sway-specific.
+Planned, not implemented yet:
 
-## Non-goals for the first release
+- OCR capture flow
+- GUI/tray/layer-shell overlay
+- native screenshot backend abstraction beyond the current grimshot-based path
 
-The first release is not intended to be a full graphical screenshot editor. It
-will orchestrate existing mature tools first:
+## Runtime model
 
-- `grim` / `grimshot` / `slurp` for capture
-- `swappy` for annotation/editing
-- `tesseract` and ImageMagick for OCR
-- `wl-copy` / `wl-paste` for Wayland clipboard I/O
-- `xdotool` for typing into XWayland applications
-- optionally later: `wtype` or `ydotool` as typing backends
+`flosh` separates **configuration** from **state**.
 
-A tray icon or overlay UI is planned later, after the CLI and config model are
-stable.
+Configuration is reproducible:
 
-## Design principles
+- capture mode
+- filename template
+- picker backend
+- paste backend
+- tool paths
 
-### CLI first, GUI later
+State is dynamic:
 
-Every important action must be available as a stable CLI command. A GUI, tray
-icon, or Waybar button should only call these commands or the same Python core
-API.
+- current active capture target directory
+- recent capture target directories
 
-### Config and state are separate
-
-Configuration is reproducible and can live in a project/workspace context.
-State is dynamic and can change during daily use.
-
-Examples:
-
-- config: default capture mode, OCR language, preferred picker, typing backend
-- state: active capture target directory, recent target directories
-
-This separation allows context-driven setups such as ROBA/workspace configs
-without constantly dirtying committed configuration files when only the current
-screenshot target changes.
-
-### Deterministic precedence
-
-For every setting, resolution order is:
+Precedence is deterministic:
 
 ```text
-CLI argument > environment variable > config file > built-in default
+CLI argument > environment variable > profile > config file > built-in default
 ```
-
-This is intentionally boring and inspectable. It allows the same config file to
-be reused while a systemd user service, Waybar module, or ROBA context overrides
-only one value via environment.
-
-### Multiple config files are first-class
-
-`flosh` supports explicit config selection:
-
-```bash
-flosh --config ./flosh.toml target show
-```
-
-or via environment:
-
-```bash
-FLOSH_CONFIG=./flosh.toml flosh target show
-```
-
-This makes per-workspace configuration a normal workflow rather than a hack.
 
 ## Installation
 
-Development checkout:
-
-```bash
-git clone https://github.com/mfulz/flosh.git
-cd flosh
-python -m venv .venv
-. .venv/bin/activate
-pip install -e '.[dev]'
-```
-
-With `uv`:
+Development checkout with `uv`:
 
 ```bash
 git clone https://github.com/mfulz/flosh.git
@@ -111,28 +61,30 @@ uv sync --extra dev
 uv run flosh --help
 ```
 
-System tools expected for full functionality on Sway/Wayland:
+Editable install with pip:
 
 ```bash
-sudo pacman -S --needed grim slurp swappy wl-clipboard xdotool tesseract imagemagick fzf wofi
+python -m venv .venv
+. .venv/bin/activate
+pip install -e '.[dev]'
 ```
 
-Only the tools needed for the command being used are required at runtime.
+Expected system tools for the current Sway/Wayland workflow:
+
+```bash
+sudo pacman -S --needed grim slurp swappy wl-clipboard xdotool fzf wofi
+```
+
+Only tools needed by the command being used are required at runtime.
 
 ## Command overview
 
 ```bash
-flosh --help
-```
-
-Planned top-level command groups:
-
-```text
 flosh config ...   inspect and manage config files
 flosh target ...   inspect and manage the active capture target directory
 flosh take ...     capture screenshots and route save/edit flows
 flosh paste ...    type clipboard or text into focused applications
-flosh ocr ...      capture and OCR screen content
+flosh ocr ...      placeholder for future OCR flow
 ```
 
 Global options:
@@ -149,23 +101,32 @@ FLOSH_CONFIG=./flosh.toml FLOSH_PROFILE=work FLOSH_VERBOSE=1 flosh <command>
 
 ## Configuration
 
-### Default config paths
-
-User config path, following XDG conventions via `platformdirs`:
+Default user config path:
 
 ```text
 ~/.config/flosh/config.toml
 ```
 
-User state path:
+Default user state path:
 
 ```text
 ~/.local/state/flosh/state.toml
 ```
 
-Both paths can be overridden.
+Create a starter config:
 
-### Example config
+```bash
+flosh config init
+```
+
+Create or operate on an explicit config:
+
+```bash
+flosh --config ./flosh.toml config init
+flosh --config ./flosh.toml config show
+```
+
+Example config:
 
 ```toml
 [capture]
@@ -207,13 +168,11 @@ tesseract = "tesseract"
 magick = "magick"
 ```
 
-### Profiles
-
-A config file may contain named profiles:
+Profiles are nested below `[profiles.<name>]`:
 
 ```toml
-[profiles.work.capture]
-save_dir = "~/Work/PRIVATE/screenshots"
+[profiles.work.target]
+root = "~/Work/PRIVATE"
 
 [profiles.citrix.paste]
 backend = "xdotool"
@@ -225,210 +184,112 @@ Use a profile:
 
 ```bash
 flosh --profile citrix paste clipboard
-```
-
-or:
-
-```bash
 FLOSH_PROFILE=citrix flosh paste clipboard
 ```
 
-Profile values override base config values but are still overridden by env and
-CLI arguments.
+## Environment variables
 
-## Environment variable mapping
-
-Every commonly used option should have an environment override. Names are stable
-and prefixed with `FLOSH_`.
-
-Examples:
+Common overrides:
 
 ```bash
 FLOSH_CONFIG=./flosh.toml
-FLOSH_PROFILE=citrix
-FLOSH_CAPTURE_SAVE_DIR=/tmp/screens
+FLOSH_PROFILE=work
+FLOSH_VERBOSE=1
 FLOSH_CAPTURE_MODE=area
+FLOSH_CAPTURE_DESTINATION=clipboard
+FLOSH_CAPTURE_SAVE_DIR=/tmp/screens
+FLOSH_FILENAME_TEMPLATE='%Y-%m-%d_%H-%M-%S.png'
 FLOSH_TARGET_ROOT=/home/mfulz/Work/PRIVATE
 FLOSH_PICKER=fzf
 FLOSH_PASTE_BACKEND=xdotool
 FLOSH_PASTE_WAIT_S=2
 FLOSH_PASTE_DELAY_MS=80
-FLOSH_OCR_LANG=deu+eng
+FLOSH_STATE_PATH=/tmp/flosh-state.toml
 ```
 
 ## Config commands
 
-### Print the effective config path
+Print config path:
 
 ```bash
 flosh config path
 ```
 
-With explicit config:
-
-```bash
-flosh --config ./flosh.toml config path
-```
-
-### Show merged effective configuration
+Show effective merged config:
 
 ```bash
 flosh config show
-```
-
-Show as TOML:
-
-```bash
 flosh config show --format toml
-```
-
-Show as JSON:
-
-```bash
 flosh config show --format json
-```
-
-Show where values came from:
-
-```bash
 flosh config show --sources
 ```
 
-This should help debug precedence:
-
-```text
-capture.save_dir = /tmp/screens    source=env:FLOSH_CAPTURE_SAVE_DIR
-paste.delay_ms = 80                source=config:/home/.../config.toml
-```
-
-### Create a starter config
+Get or set a value:
 
 ```bash
-flosh config init
+flosh config get capture.default_mode
+flosh config set capture.default_mode area
 ```
 
-Create at an explicit path:
-
-```bash
-flosh --config ./flosh.toml config init
-```
-
-Overwrite existing file explicitly:
-
-```bash
-flosh config init --force
-```
-
-### Get a config value
-
-```bash
-flosh config get capture.save_dir
-```
-
-### Set a config value
-
-```bash
-flosh config set capture.save_dir ~/Pictures/Screenshots
-```
-
-Set in a workspace config:
-
-```bash
-flosh --config ./flosh.toml config set capture.save_dir ./screenshots
-```
-
-### Edit config in `$EDITOR`
+Edit in `$EDITOR`:
 
 ```bash
 flosh config edit
 ```
 
-## Target directory commands
+## Target commands
 
-The target directory is the active save destination for screenshot/capture
-commands. It is state by default, not static config.
+The target directory is the active destination for screenshot saves. It is stored
+as state, not as static config.
 
-### Show current target
+Show target:
 
 ```bash
 flosh target show
-```
-
-Short display for Waybar:
-
-```bash
 flosh target show --short
-```
-
-JSON output for status bars:
-
-```bash
 flosh target show --json
 ```
 
-Expected JSON shape:
+Waybar JSON shape:
 
 ```json
 {
-  "text": "screenshots",
+  "text": "Screenshots",
   "tooltip": "/home/mfulz/Pictures/Screenshots",
   "class": "flosh-target"
 }
 ```
 
-### Set current target
+Set target:
 
 ```bash
 flosh target set ~/Pictures/Screenshots
-```
-
-Create if missing:
-
-```bash
 flosh target set ~/Pictures/Screenshots --create
-```
-
-Use without writing state, useful in scripts:
-
-```bash
 flosh target set /tmp/screens --print-only
 ```
 
-### Pick current target interactively
-
-Use configured root:
+Pick target interactively:
 
 ```bash
 flosh target pick
 ```
 
-Use explicit root:
+Current behavior:
 
-```bash
-flosh target pick --root ~/Work/PRIVATE
-```
+- without `--root`, picker boundary is `/`
+- start directory is `target.root` from config
+- this allows moving out to `/tmp`, `/home`, etc.
+- with `--root`, picker is explicitly constrained below that root
 
-Allow creating directories:
-
-```bash
-flosh target pick --root ~/Work/PRIVATE --create
-```
-
-Start browsing at current target instead of root:
-
-```bash
-flosh target pick --root ~/Work/PRIVATE --start-current
-```
-
-Force picker:
+Examples:
 
 ```bash
 flosh target pick --picker fzf
-flosh target pick --picker wofi
-flosh target pick --picker rofi
+flosh target pick --root ~/Work/PRIVATE --create
+flosh target pick --root ~/Work/PRIVATE --start-current --create --picker fzf
 ```
 
-The picker should support this navigation model:
+Picker navigation model:
 
 ```text
 ✔ Select this directory
@@ -437,19 +298,42 @@ child-directory/
 + Create new folder here
 ```
 
+Picker backend selection:
+
+```bash
+flosh target pick --picker auto
+flosh target pick --picker fzf
+flosh target pick --picker wofi
+flosh target pick --picker rofi
+flosh target pick --picker stdin
+```
+
 ## Screenshot commands
 
-### Take using defaults
+### Swappy flow
+
+Default screenshot command:
 
 ```bash
 flosh take
 ```
 
-By default this captures an image and opens it in `swappy` with `-o` pointing at
-the active target directory. Swappy remains the interactive UI; flosh only
-provides the suggested output path.
+Current behavior:
 
-### Capture modes
+1. capture a raw screenshot via `grimshot`
+2. open `swappy`
+3. pass an output path with `-o` pointing at the active target directory
+4. keep stdout/stderr quiet by default
+5. show a desktop notification after swappy exits successfully
+
+Conceptually:
+
+```bash
+grimshot save area /tmp/flosh-capture-XXXX.png
+swappy -f /tmp/flosh-capture-XXXX.png -o "$ACTIVE_TARGET/filename.png"
+```
+
+Capture modes:
 
 ```bash
 flosh take --mode area
@@ -461,8 +345,10 @@ flosh take --mode window
 
 ### Direct output without swappy
 
-Use `--no-swappy` when flosh itself should decide where the image goes. The
-default direct destination is configurable and currently defaults to clipboard.
+Use `--no-swappy` when `flosh` itself should decide the output destination.
+
+Default direct destination is `capture.default_destination`, currently
+`clipboard`.
 
 ```bash
 flosh take --no-swappy
@@ -470,16 +356,22 @@ flosh take --no-swappy --clipboard
 flosh take --no-swappy --save
 ```
 
-To make direct file output the default for `--no-swappy` in a config/profile:
+Make direct file output the default for `--no-swappy`:
 
 ```bash
 flosh config set capture.default_destination file
 ```
 
-Or for one process environment:
+Or for one process:
 
 ```bash
 FLOSH_CAPTURE_DESTINATION=file flosh take --no-swappy
+```
+
+Machine-readable output is only printed when requested:
+
+```bash
+flosh take --no-swappy --save --json
 ```
 
 ### Menu flow
@@ -497,18 +389,22 @@ Select/change target directory
 Cancel
 ```
 
-OCR actions are planned as a follow-up once the capture core is stable. Later
-this can become a tray or overlay menu without changing the backend commands.
+Notes:
+
+- `Edit/save in swappy` opens swappy with `-o` set to the active target path.
+- `Save screenshot directly` saves the already captured raw screenshot without swappy.
+- `Select/change target directory` changes target state before choosing another action.
+- OCR menu entries are planned later.
 
 ## Paste commands
 
-Paste commands do not use the clipboard protocol to paste into the target app.
-They read text and type it as keyboard input.
+Paste commands type text into the focused application. They do not ask the target
+application to paste from its clipboard.
 
-This is useful for applications such as Citrix/Wfica where normal clipboard
-paste may be disabled or unreliable.
+This is useful for Citrix/Wfica and similar environments where normal clipboard
+paste is disabled or unreliable.
 
-### Type current clipboard into focused app
+Type current Wayland clipboard into the focused app:
 
 ```bash
 flosh paste clipboard
@@ -520,28 +416,19 @@ Recommended for Citrix/Wfica running as XWayland:
 flosh paste clipboard --backend xdotool --wait-s 2 --delay-ms 80
 ```
 
-The delay gives time to focus the target field. The per-character delay makes
-Citrix less likely to drop or mangle input.
-
-Environment overrides:
-
-```bash
-FLOSH_PASTE_BACKEND=xdotool FLOSH_PASTE_WAIT_S=2 FLOSH_PASTE_DELAY_MS=80 flosh paste clipboard
-```
-
-### Type literal text
+Type literal text:
 
 ```bash
 flosh paste text 'hello world'
 ```
 
-### Type stdin
+Type stdin:
 
 ```bash
 printf 'hello world\n' | flosh paste stdin
 ```
 
-### Backend selection
+Backends:
 
 ```bash
 flosh paste clipboard --backend xdotool
@@ -549,55 +436,49 @@ flosh paste clipboard --backend wtype
 flosh paste clipboard --backend ydotool
 ```
 
-Initial default should be `xdotool` because Citrix/Wfica as XWayland was tested
-to work with `xdotool`, while `wtype` produced incorrect input in that target.
+Current practical default is `xdotool`, because Citrix/Wfica as XWayland was
+tested with `xdotool`, while `wtype` produced incorrect input in that target.
 
 ## OCR commands
 
-OCR can be implemented after the initial target/take/paste core is stable.
-
-### Capture and copy OCR text
+OCR is not implemented yet. The placeholder command exists:
 
 ```bash
-flosh ocr capture --copy
+flosh ocr capture
 ```
 
-### Capture and type OCR text into focused app
+Planned behavior:
 
-```bash
-flosh ocr capture --type --backend xdotool --wait-s 2 --delay-ms 80
-```
-
-### Capture, copy, and save image
-
-```bash
-flosh ocr capture --copy --save-image
-```
-
-### OCR options
-
-```bash
-flosh ocr capture --lang deu+eng --psm 6
-flosh ocr capture --no-preprocess
-flosh ocr capture --keep-preprocessed
-```
+- capture image
+- optionally preprocess with ImageMagick
+- OCR with `tesseract`
+- copy or type recognized text
+- optionally save intermediate images for debugging
 
 ## Waybar integration
 
-### Show active capture target
-
-Example Waybar module:
+Show active capture target:
 
 ```json
 "custom/flosh-target": {
   "exec": "flosh target show --json",
   "return-type": "json",
   "interval": 5,
-  "on-click": "flosh target pick --root /home/mfulz/Work/PRIVATE --start-current --create --picker fzf"
+  "on-click": "flosh target pick --start-current --create --picker fzf"
 }
 ```
 
-### Type clipboard into Citrix/Wfica
+Take screenshot:
+
+```json
+"custom/flosh-shot": {
+  "format": "",
+  "tooltip": "Take screenshot",
+  "on-click": "flosh take"
+}
+```
+
+Type clipboard into focused window:
 
 ```json
 "custom/flosh-paste": {
@@ -607,114 +488,43 @@ Example Waybar module:
 }
 ```
 
-### Take screenshot
-
-```json
-"custom/flosh-shot": {
-  "format": "",
-  "tooltip": "Take screenshot",
-  "on-click": "flosh take menu"
-}
-```
-
 ## Sway integration
 
-Existing `shotdir` style bindings can migrate to `flosh`.
-
-Take screenshot directly:
+Screenshot via swappy:
 
 ```sway
 bindsym $mod+p exec "$HOME/.local/bin/flosh take"
 ```
 
-Open menu:
+Screenshot menu:
 
 ```sway
 bindsym $mod+Shift+p exec "$HOME/.local/bin/flosh take menu"
 ```
 
-Type clipboard into focused app, useful for Citrix/Wfica:
+Type clipboard into focused app:
 
 ```sway
 bindsym $mod+Shift+v exec "$HOME/.local/bin/flosh paste clipboard --backend xdotool --wait-s 2 --delay-ms 80"
 ```
 
-Change target directory via picker:
+Pick target directory:
 
 ```sway
-bindsym $mod+Ctrl+p exec "$HOME/.local/bin/flosh target pick --root /home/mfulz/Work/PRIVATE --start-current --create --picker fzf"
+bindsym $mod+Ctrl+p exec "$HOME/.local/bin/flosh target pick --start-current --create --picker fzf"
 ```
 
-## Migration from `shotdir`
+## Migration from shotdir
 
-Existing `shotdir` features to migrate first:
-
-| shotdir | flosh target |
+| shotdir | flosh |
 | --- | --- |
 | `shotdir --show` | `flosh target show` |
 | `shotdir --set PATH` | `flosh target set PATH` |
 | `shotdir --pick-under ROOT --create` | `flosh target pick --root ROOT --create` |
 | `shotdir --take` | `flosh take` |
 | `shotdir --take --no-swappy` | `flosh take --no-swappy --save` |
-| `shotdir --ocr` | `flosh ocr capture --copy` |
 | `shotdir --menu` | `flosh take menu` |
-
-New feature:
-
-```bash
-flosh paste clipboard --backend xdotool
-```
-
-## Implementation plan
-
-### Phase 1: CLI skeleton and config model
-
-- Typer app and command groups
-- config path resolution
-- TOML config loading
-- profile merge
-- env var overrides
-- `flosh config path/show/init/get/set/edit`
-
-### Phase 2: target state and picker
-
-- state file for active target directory
-- `target show/set/pick`
-- picker backends: auto, fzf, wofi, rofi, stdin
-- recent target tracking
-- Waybar JSON output
-
-### Phase 3: paste backend
-
-- `paste clipboard`
-- `paste text`
-- `paste stdin`
-- backend `xdotool`
-- optional later backends: `wtype`, `ydotool`
-
-### Phase 4: screenshot capture
-
-- migrate shotdir capture/save/swappy flow
-- `take` and `take menu`
-- target state integration
-
-Implemented baseline:
-
-- `flosh take` opens swappy with `-o` set to the active target path
-- `flosh take --no-swappy` direct clipboard/file output
-- `flosh take --no-swappy --save`
-- `flosh take menu` with save/swappy/target-change/cancel
-
-### Phase 5: OCR
-
-- migrate OCR preprocessing and tesseract flow
-- copy/type/save variants
-
-### Phase 6: GUI/tray/overlay
-
-- small tray or Wayland layer-shell frontend
-- no new workflow logic in the GUI
-- buttons call stable CLI/core functions
+| `shotdir --ocr` | planned: `flosh ocr capture` |
 
 ## Development
 
@@ -724,15 +534,10 @@ Run from checkout:
 uv run flosh --help
 ```
 
-Run linting:
+Lint and type check:
 
 ```bash
 uv run ruff check .
-```
-
-Run type checking:
-
-```bash
 uv run mypy src
 ```
 
