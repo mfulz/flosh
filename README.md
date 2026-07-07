@@ -255,7 +255,7 @@ FLOSH_CAPTURE_FRONTEND=satty
 FLOSH_CAPTURE_DESTINATION=file
 FLOSH_CAPTURE_SAVE_DIR=/tmp/screens
 FLOSH_FILENAME_TEMPLATE='%Y-%m-%d_%H-%M-%S.png'
-FLOSH_TARGET_ROOT=/home/mfulz/Work/PRIVATE
+FLOSH_TARGET_ROOT=~/Work
 FLOSH_TARGET_START=current
 FLOSH_TARGET_CREATE=false
 FLOSH_PICKER=fzf
@@ -323,10 +323,10 @@ config/profile/state and defaults are active:
 
 ```json
 {
-  "alt": "/home/mfulz/Pictures/Screenshots",
+  "alt": "<home>/Pictures/Screenshots",
   "class": ["flosh-target", "exists"],
   "text": "~/Pictures/Screenshots",
-  "tooltip": "flosh\ntarget: /home/mfulz/Pictures/Screenshots\nconfig: /home/mfulz/.config/flosh/config.toml\nprofile: default\nstate: /home/mfulz/.local/state/flosh/state.toml\n\ncapture\n  action: take\n  mode: area\n  backend: grimshot\n  frontend: satty\n  destination: file\n  filename: %Y-%m-%d_%H-%M-%S.png\n  picker: auto\n\ntarget picker\n  root: /home/mfulz/Pictures\n  start: current\n  create: False\n\npaste\n  action: clipboard\n  backend: xdotool\n  wait_s: 2.0\n  delay_ms: 80"
+  "tooltip": "flosh\ntarget: <home>/Pictures/Screenshots\nconfig: <home>/.config/flosh/config.toml\nprofile: default\nstate: <home>/.local/state/flosh/state.toml\n\ncapture\n  action: take\n  mode: area\n  backend: grimshot\n  frontend: satty\n  destination: file\n  filename: %Y-%m-%d_%H-%M-%S.png\n  picker: auto\n\ntarget picker\n  root: <home>/Pictures\n  start: current\n  create: False\n\npaste\n  action: clipboard\n  backend: xdotool\n  wait_s: 2.0\n  delay_ms: 80"
 }
 ```
 
