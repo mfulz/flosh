@@ -31,6 +31,7 @@ def pick_from_menu(
     prompt: str,
     picker: str,
     terminal: str | None = None,
+    terminal_class: str | None = None,
 ) -> str | None:
     if not entries:
         return None
@@ -59,7 +60,12 @@ def pick_from_menu(
         return (proc.stdout or "").strip() or None
 
     if selected == "fzf":
-        return run_fzf(menu_input, prompt=prompt, terminal=terminal)
+        return run_fzf(
+            menu_input,
+            prompt=prompt,
+            terminal=terminal,
+            terminal_class=terminal_class,
+        )
 
     print("Available entries:", file=sys.stderr)
     for entry in entries:
@@ -70,7 +76,13 @@ def pick_from_menu(
         return None
 
 
-def prompt_text(*, prompt: str, picker: str, terminal: str | None = None) -> str | None:
+def prompt_text(
+    *,
+    prompt: str,
+    picker: str,
+    terminal: str | None = None,
+    terminal_class: str | None = None,
+) -> str | None:
     selected = choose_picker(picker)
     if selected == "wofi":
         proc = subprocess.run(
@@ -91,14 +103,24 @@ def prompt_text(*, prompt: str, picker: str, terminal: str | None = None) -> str
         )
         return (proc.stdout or "").strip() or None
     if selected == "fzf" and not sys.stdin.isatty():
-        return prompt_text_in_terminal(prompt=prompt, terminal=terminal)
+        return prompt_text_in_terminal(
+            prompt=prompt,
+            terminal=terminal,
+            terminal_class=terminal_class,
+        )
     try:
         return input(f"{prompt}: ").strip() or None
     except EOFError:
         return None
 
 
-def run_fzf(menu_input: str, *, prompt: str, terminal: str | None) -> str | None:
+def run_fzf(
+    menu_input: str,
+    *,
+    prompt: str,
+    terminal: str | None,
+    terminal_class: str | None,
+) -> str | None:
     if sys.stdin.isatty():
         proc = subprocess.run(
             [shutil.which("fzf") or "fzf", "--print-query", f"--prompt={prompt}> "],
@@ -108,7 +130,12 @@ def run_fzf(menu_input: str, *, prompt: str, terminal: str | None) -> str | None
             check=False,
         )
         return parse_fzf_output(proc.stdout)
-    return run_fzf_in_terminal(menu_input, prompt=prompt, terminal=terminal)
+    return run_fzf_in_terminal(
+        menu_input,
+        prompt=prompt,
+        terminal=terminal,
+        terminal_class=terminal_class,
+    )
 
 
 def parse_fzf_output(output: str) -> str | None:
@@ -120,8 +147,24 @@ def parse_fzf_output(output: str) -> str | None:
     return lines[0].strip() or None
 
 
-def run_fzf_in_terminal(menu_input: str, *, prompt: str, terminal: str | None) -> str | None:
-    terminal_cmd = shlex.split(terminal or os.environ.get("TERMINAL") or "alacritty")
+def terminal_command(terminal: str | None, terminal_class: str | None) -> list[str]:
+    command = shlex.split(terminal or os.environ.get("TERMINAL") or "alacritty")
+    if not command:
+        return ["alacritty"]
+    executable = Path(command[0]).name
+    if executable == "alacritty" and terminal_class:
+        return [*command, "--class", f"{terminal_class},{terminal_class}"]
+    return command
+
+
+def run_fzf_in_terminal(
+    menu_input: str,
+    *,
+    prompt: str,
+    terminal: str | None,
+    terminal_class: str | None,
+) -> str | None:
+    terminal_cmd = terminal_command(terminal, terminal_class)
     with tempfile.NamedTemporaryFile(
         "w",
         prefix="flosh-fzf-entries-",
@@ -155,8 +198,13 @@ def run_fzf_in_terminal(menu_input: str, *, prompt: str, terminal: str | None) -
         output_path.unlink(missing_ok=True)
 
 
-def prompt_text_in_terminal(*, prompt: str, terminal: str | None) -> str | None:
-    terminal_cmd = shlex.split(terminal or os.environ.get("TERMINAL") or "alacritty")
+def prompt_text_in_terminal(
+    *,
+    prompt: str,
+    terminal: str | None,
+    terminal_class: str | None,
+) -> str | None:
+    terminal_cmd = terminal_command(terminal, terminal_class)
     with tempfile.NamedTemporaryFile(
         "w",
         prefix="flosh-prompt-output-",
@@ -233,11 +281,13 @@ def create_under(
     *,
     picker: str,
     terminal: str | None = None,
+    terminal_class: str | None = None,
 ) -> Path | None:
     rel = prompt_text(
         prompt=f"New folder under {current.name or current}",
         picker=picker,
         terminal=terminal,
+        terminal_class=terminal_class,
     )
     if not rel:
         return None
@@ -256,6 +306,7 @@ def browse_directory(
     allow_create: bool = False,
     picker: str = "auto",
     terminal: str | None = None,
+    terminal_class: str | None = None,
 ) -> Path | None:
     root = normalize(root)
     if not root.exists():
@@ -285,6 +336,7 @@ def browse_directory(
             prompt=f"flosh target [{rel}]",
             picker=picker,
             terminal=terminal,
+            terminal_class=terminal_class,
         )
         if not choice:
             return None
@@ -294,7 +346,13 @@ def browse_directory(
             current = current.parent
             continue
         if choice == CREATE_HERE:
-            created = create_under(root, current, picker=picker, terminal=terminal)
+            created = create_under(
+                root,
+                current,
+                picker=picker,
+                terminal=terminal,
+                terminal_class=terminal_class,
+            )
             if created is not None:
                 return created
             continue

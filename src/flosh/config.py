@@ -58,6 +58,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "tesseract": "tesseract",
         "magick": "magick",
         "terminal": "alacritty",
+        "terminal_class": "flosh-picker",
     },
     "state": {
         "path": str(default_state_path()),
@@ -75,6 +76,7 @@ ENV_OVERRIDES: dict[str, tuple[str, type[Any]]] = {
     "FLOSH_TARGET_CREATE": ("target.create", bool),
     "FLOSH_PICKER": ("capture.picker", str),
     "FLOSH_TERMINAL": ("tools.terminal", str),
+    "FLOSH_TERMINAL_CLASS": ("tools.terminal_class", str),
     "FLOSH_PASTE_BACKEND": ("paste.backend", str),
     "FLOSH_PASTE_KEYMAP": ("paste.keymap", str),
     "FLOSH_PASTE_WAIT_S": ("paste.wait_s", float),

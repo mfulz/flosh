@@ -395,6 +395,7 @@ def pick_target_interactive(
     )
     selected_picker = picker or str(get_dotted(resolved.data, "capture.picker"))
     selected_terminal = terminal or str(get_dotted(resolved.data, "tools.terminal"))
+    selected_terminal_class = str(get_dotted(resolved.data, "tools.terminal_class"))
     create_missing = create
     if create_missing is None:
         create_missing = bool(get_dotted(resolved.data, "target.create"))
@@ -407,6 +408,7 @@ def pick_target_interactive(
             allow_create=create_missing,
             picker=selected_picker,
             terminal=selected_terminal,
+            terminal_class=selected_terminal_class,
         )
     except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from None
@@ -623,6 +625,7 @@ def take_menu(
     resolved = resolve_config(ctx_obj(ctx))
     selected_picker = picker or settings.picker
     selected_terminal = terminal or str(get_dotted(resolved.data, "tools.terminal"))
+    selected_terminal_class = str(get_dotted(resolved.data, "tools.terminal_class"))
     create_missing = create
     if create_missing is None:
         create_missing = bool(get_dotted(resolved.data, "target.create"))
@@ -658,6 +661,7 @@ def take_menu(
                     allow_create=create_missing,
                     picker=selected_picker,
                     terminal=selected_terminal,
+                    terminal_class=selected_terminal_class,
                 )
                 if selected is None:
                     continue

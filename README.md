@@ -171,6 +171,7 @@ ydotool = "ydotool"
 tesseract = "tesseract"
 magick = "magick"
 terminal = "alacritty"
+terminal_class = "flosh-picker"
 ```
 
 Profiles are nested below `[profiles.<name>]`:
@@ -209,6 +210,7 @@ FLOSH_TARGET_START=current
 FLOSH_TARGET_CREATE=false
 FLOSH_PICKER=fzf
 FLOSH_TERMINAL=alacritty
+FLOSH_TERMINAL_CLASS=flosh-picker
 FLOSH_PASTE_BACKEND=xdotool
 FLOSH_PASTE_KEYMAP=de-us
 FLOSH_PASTE_WAIT_S=2
@@ -332,8 +334,12 @@ When `--picker fzf` is used without an attached TTY, `flosh` opens a terminal
 
 ```bash
 flosh target pick --picker fzf --terminal alacritty
-FLOSH_TERMINAL=alacritty flosh target pick --picker fzf
+FLOSH_TERMINAL=alacritty FLOSH_TERMINAL_CLASS=flosh-picker flosh target pick --picker fzf
 ```
+
+For Alacritty, `tools.terminal_class` sets a stable Wayland `app_id`/X11 class
+for picker windows. This makes Sway rules predictable without affecting normal
+terminal windows.
 
 Directory creation can be controlled by CLI, config, or environment:
 
@@ -593,6 +599,14 @@ OCR and paste can also be represented as text+icon buttons:
 ```
 
 ## Sway integration
+
+Make the fzf picker terminal float by matching its stable class/app_id:
+
+```sway
+for_window [app_id="flosh-picker"] floating enable
+for_window [app_id="flosh-picker"] resize set 1200 800
+for_window [app_id="flosh-picker"] move position center
+```
 
 Screenshot via configured editor:
 
